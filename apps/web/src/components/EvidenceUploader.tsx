@@ -1,10 +1,18 @@
 'use client';
 
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { ApiError, uploadToSignedUrl } from '@/lib/api';
+import { ApiError } from '@/lib/api';
 import { useApi } from '@/lib/auth';
-import { formatBytes, formatDateTime } from '@/lib/format';
-import type { EvidenceViewResponse, UploadReservationResponse } from '@/lib/types';
+import {
+  ACCEPT_ATTRIBUTE,
+  MAX_EVIDENCE_BYTES,
+  formatBytes,
+  uploadEvidence,
+  validateEvidenceFile,
+  type UploadPhase,
+} from '@/lib/evidence-upload';
+import { formatDateTime } from '@/lib/format';
+import type { EvidenceViewResponse } from '@/lib/types';
 import { Alert, Button, EmptyState, Spinner } from './ui';
 
 /**
@@ -17,10 +25,7 @@ import { Alert, Button, EmptyState, Spinner } from './ui';
  * is counted until the confirm step verifies the object landed.
  */
 
-const ACCEPTED = 'image/jpeg,image/png,image/webp,image/heic,application/pdf';
-const MAX_BYTES = 8 * 1024 * 1024;
-
-type Phase = 'idle' | 'reserving' | 'uploading' | 'confirming';
+type Phase = 'idle' | UploadPhase;
 
 export function EvidenceUploader({
   caseId,
@@ -59,36 +64,14 @@ export function EvidenceUploader({
 
       // Checked here for an instant, friendly message; the server enforces the
       // same limits again and is the actual authority.
-      if (file.size > MAX_BYTES) {
-        setError(`That file is ${formatBytes(file.size)}. Please use one under ${formatBytes(MAX_BYTES)}.`);
-        return;
-      }
-      if (!ACCEPTED.split(',').includes(file.type)) {
-        setError('Please upload a JPEG, PNG, WebP or HEIC photo, or a PDF.');
+      const problem = validateEvidenceFile(file);
+      if (problem) {
+        setError(problem);
         return;
       }
 
       try {
-        setPhase('reserving');
-        const reservation = await api<UploadReservationResponse>(`/cases/${caseId}/evidence`, {
-          method: 'POST',
-          body: {
-            fileName: file.name,
-            contentType: file.type,
-            sizeBytes: file.size,
-            label: file.name.replace(/\.[^.]+$/, '').slice(0, 120),
-          },
-        });
-
-        setPhase('uploading');
-        await uploadToSignedUrl(reservation.uploadUrl, reservation.headers, file);
-
-        setPhase('confirming');
-        await api(`/cases/${caseId}/evidence/confirm`, {
-          method: 'POST',
-          body: { evidenceId: reservation.evidenceId },
-        });
-
+        await uploadEvidence(api, caseId, file, setPhase);
         await refresh();
         onUploaded?.();
       } catch (caught) {
@@ -173,7 +156,7 @@ export function EvidenceUploader({
             ref={inputRef}
             id={`evidence-${caseId}`}
             type="file"
-            accept={ACCEPTED}
+            accept={ACCEPT_ATTRIBUTE}
             className="sr-only"
             disabled={busy}
             onChange={(event) => {
@@ -191,7 +174,7 @@ export function EvidenceUploader({
             {busy ? phaseLabel[phase] : 'Add a photo or PDF'}
           </Button>
           <p id={`evidence-hint-${caseId}`} className="mt-2 text-xs text-ink-muted">
-            JPEG, PNG, WebP, HEIC or PDF, up to {formatBytes(MAX_BYTES)}. Files are private to you and are served only
+            JPEG, PNG, WebP, HEIC or PDF, up to {formatBytes(MAX_EVIDENCE_BYTES)}. Files are private to you and are served only
             through short-lived links.
           </p>
           {/* Progress is announced for screen reader users, not just shown. */}

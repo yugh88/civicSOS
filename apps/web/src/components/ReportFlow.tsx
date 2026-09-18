@@ -14,6 +14,8 @@ import type {
   KnowledgeResponse,
   LocationInput,
 } from '@/lib/types';
+import { PhotoPicker, type PickedPhoto } from './PhotoPicker';
+import { uploadEvidenceBatch } from '@/lib/evidence-upload';
 import { PlanView } from './PlanView';
 import {
   Alert,
@@ -26,6 +28,7 @@ import {
   PointsPill,
   SectionHeading,
   Skeleton,
+  Spinner,
   Textarea,
 } from './ui';
 import {
@@ -95,6 +98,14 @@ export function ReportFlow({ initialCategory }: { initialCategory?: CategoryId }
   const [complaintSubject, setComplaintSubject] = useState('');
   const [complaintBody, setComplaintBody] = useState('');
   const [created, setCreated] = useState<CreateCaseResponse | undefined>();
+  /**
+   * Photos chosen before the case exists. Held in memory and replayed through
+   * the existing evidence API once creation succeeds — no new endpoint.
+   */
+  const [photos, setPhotos] = useState<PickedPhoto[]>([]);
+  const [photoUpload, setPhotoUpload] = useState<
+    { state: 'idle' } | { state: 'uploading'; done: number; total: number } | { state: 'done'; uploaded: number; failed: number; error?: string }
+  >({ state: 'idle' });
 
   const [analyzing, setAnalyzing] = useState(false);
   const [creating, setCreating] = useState(false);
@@ -177,7 +188,8 @@ export function ReportFlow({ initialCategory }: { initialCategory?: CategoryId }
             description: draft.description.trim(),
             location: hasLocation(draft.location) ? draft.location : undefined,
             categoryId: categoryOverride ?? draft.categoryId,
-            hasPhoto: false,
+            // Lets the plan's evidence checklist reflect what is already in hand.
+            hasPhoto: photos.length > 0,
           },
         });
         setAnalysis(result);
@@ -192,7 +204,7 @@ export function ReportFlow({ initialCategory }: { initialCategory?: CategoryId }
         setAnalyzing(false);
       }
     },
-    [api, draft, tooShort, update],
+    [api, draft, photos.length, tooShort, update],
   );
 
   const createCase = useCallback(async () => {
@@ -222,23 +234,42 @@ export function ReportFlow({ initialCategory }: { initialCategory?: CategoryId }
       setStep('created');
       window.sessionStorage.removeItem(DRAFT_KEY);
       window.scrollTo({ top: 0, behavior: 'smooth' });
+
+      // Photos go up after the case exists, through the normal evidence flow.
+      // A failure here never invalidates the case — it is reported on the
+      // confirmation screen with a link to retry from the case itself.
+      if (photos.length > 0 && result.created) {
+        setPhotoUpload({ state: 'uploading', done: 0, total: photos.length });
+        const outcome = await uploadEvidenceBatch(
+          api,
+          result.case.caseId,
+          photos.map((photo) => photo.file),
+          (done, total) => setPhotoUpload({ state: 'uploading', done, total }),
+        );
+        setPhotoUpload({ state: 'done', uploaded: outcome.uploaded, failed: outcome.failed, error: outcome.firstError });
+        if (outcome.uploaded > 0) notifyProfileChanged();
+      }
     } catch (caught) {
       setError(caught instanceof Error ? caught : new Error('Something went wrong.'));
     } finally {
       setCreating(false);
     }
-  }, [analysis, api, complaintBody, complaintSubject, draft]);
+  }, [analysis, api, complaintBody, complaintSubject, draft, photos]);
 
   const restart = useCallback(() => {
     setDraft(EMPTY_DRAFT);
     setAnalysis(undefined);
     setCreated(undefined);
+    setPhotos([]);
+    setPhotoUpload({ state: 'idle' });
     setTouched(false);
     setStep('describe');
     window.scrollTo({ top: 0 });
   }, []);
 
-  if (step === 'created' && created) return <CreatedStep result={created} onReportAnother={restart} />;
+  if (step === 'created' && created) {
+    return <CreatedStep result={created} onReportAnother={restart} photoUpload={photoUpload} />;
+  }
 
   if (step === 'plan' && analysis) {
     return (
@@ -346,10 +377,21 @@ export function ReportFlow({ initialCategory }: { initialCategory?: CategoryId }
             </div>
           ) : null}
 
+          {/* Photos: first-class, not hidden behind a disclosure. A photo is
+              the single most useful thing a citizen can attach. */}
+          <div>
+            <p className="mb-2.5 flex items-center gap-2 text-sm font-medium text-ink">
+              <IconCamera className="h-4 w-4 text-ink-faint" />
+              Add photos
+              <span className="text-xs font-normal text-ink-faint">(optional)</span>
+            </p>
+            <PhotoPicker photos={photos} onChange={setPhotos} disabled={analyzing || creating} />
+          </div>
+
           <details className="group rounded-2xl border border-line bg-surface-soft p-4">
             <summary className="flex cursor-pointer list-none items-center gap-2 text-sm font-medium text-ink-soft">
               <IconLocation className="h-4 w-4 text-ink-faint" />
-              Add location and photos
+              Add location
               <span className="ml-auto text-xs font-normal text-ink-faint">Optional</span>
             </summary>
 
@@ -391,10 +433,6 @@ export function ReportFlow({ initialCategory }: { initialCategory?: CategoryId }
                     position.
                   </p>
                 ) : null}
-                <p className="flex items-start gap-2 text-xs leading-relaxed text-ink-muted">
-                  <IconCamera className="mt-px h-4 w-4 shrink-0 text-ink-faint" />
-                  Photos are attached after the case is created, so you can take them at the spot rather than now.
-                </p>
               </div>
             </div>
           </details>
@@ -727,7 +765,20 @@ function SummaryCell({ label, value, wide = false }: { label: string; value: Rea
   );
 }
 
-function CreatedStep({ result, onReportAnother }: { result: CreateCaseResponse; onReportAnother: () => void }) {
+type PhotoUploadState =
+  | { state: 'idle' }
+  | { state: 'uploading'; done: number; total: number }
+  | { state: 'done'; uploaded: number; failed: number; error?: string };
+
+function CreatedStep({
+  result,
+  onReportAnother,
+  photoUpload,
+}: {
+  result: CreateCaseResponse;
+  onReportAnother: () => void;
+  photoUpload: PhotoUploadState;
+}) {
   const record: CaseRecord = result.case;
   const levelUp = result.awards.find((award) => award.levelUp)?.levelUp;
 
@@ -784,6 +835,32 @@ function CreatedStep({ result, onReportAnother }: { result: CreateCaseResponse; 
           </Button>
         </div>
       </Card>
+
+      {/* Photo upload runs after creation, so its outcome is reported here
+          rather than silently. A failure never invalidates the case. */}
+      {photoUpload.state === 'uploading' ? (
+        <Alert tone="accent" title="Uploading your photos" icon={<Spinner />}>
+          <p aria-live="polite">
+            {photoUpload.done} of {photoUpload.total} done. You can leave this page — the case is already saved.
+          </p>
+        </Alert>
+      ) : null}
+
+      {photoUpload.state === 'done' && photoUpload.uploaded > 0 && photoUpload.failed === 0 ? (
+        <Alert tone="good" title="Photos attached" icon={<IconCheck className="h-[18px] w-[18px]" />}>
+          {photoUpload.uploaded} photo{photoUpload.uploaded === 1 ? '' : 's'} added to your case.
+        </Alert>
+      ) : null}
+
+      {photoUpload.state === 'done' && photoUpload.failed > 0 ? (
+        <Alert tone="warn" title="Some photos did not upload">
+          <p>
+            {photoUpload.uploaded > 0 ? `${photoUpload.uploaded} uploaded, ` : ''}
+            {photoUpload.failed} could not be attached. {photoUpload.error ?? ''} Your case is saved — open it and add
+            them again from the Evidence tab.
+          </p>
+        </Alert>
+      ) : null}
 
       <Alert tone="accent" title="Next step: submit it officially" icon={<IconSend className="h-[18px] w-[18px]" />}>
         Open your case and use the official channel listed there. When you get a complaint number back, record it on

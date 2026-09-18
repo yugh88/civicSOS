@@ -1,0 +1,24 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 220" fill="none" role="img" aria-label="Overflowing waste bins on a street">
+  <defs><linearGradient id="gS" x1="200" y1="0" x2="200" y2="220" gradientUnits="userSpaceOnUse"><stop stop-color="#ECFDF5"/><stop offset="1" stop-color="#F1F5F9"/></linearGradient></defs>
+  <rect width="400" height="220" fill="url(#gS)"/>
+  <path d="M0 150h400v70H0z" fill="#CBD5E1" opacity=".6"/>
+  <path d="M0 146h400v8H0z" fill="#94A3B8" opacity=".5"/>
+  <!-- bags -->
+  <g fill="#64748B"><ellipse cx="74" cy="168" rx="36" ry="24"/><ellipse cx="330" cy="172" rx="30" ry="20"/></g>
+  <g fill="#475569"><ellipse cx="60" cy="158" rx="20" ry="14"/><ellipse cx="342" cy="164" rx="16" ry="11"/></g>
+  <!-- bins -->
+  <g>
+    <path d="M118 96h74l-7 96a8 8 0 0 1-8 7h-44a8 8 0 0 1-8-7z" fill="#059669"/>
+    <path d="M112 84h86v16h-86z" rx="4" fill="#047857"/><rect x="112" y="82" width="86" height="16" rx="6" fill="#047857"/>
+    <rect x="144" y="74" width="22" height="10" rx="5" fill="#065F46"/>
+    <g fill="#34D399" opacity=".5"><rect x="136" y="116" width="8" height="60" rx="4"/><rect x="152" y="116" width="8" height="60" rx="4"/><rect x="168" y="116" width="8" height="60" rx="4"/></g>
+  </g>
+  <g>
+    <path d="M214 104h66l-6 88a8 8 0 0 1-8 7h-38a8 8 0 0 1-8-7z" fill="#10B981"/>
+    <rect x="208" y="90" width="78" height="15" rx="6" fill="#059669"/>
+    <rect x="236" y="82" width="20" height="9" rx="4" fill="#047857"/>
+  </g>
+  <!-- spilled waste -->
+  <g opacity=".9"><circle cx="200" cy="76" r="9" fill="#FBBF24"/><circle cx="216" cy="70" r="7" fill="#F87171"/><circle cx="186" cy="68" r="6" fill="#60A5FA"/><circle cx="230" cy="78" r="6" fill="#A78BFA"/></g>
+  <g fill="#94A3B8" opacity=".45"><rect x="312" y="52" width="26" height="94" rx="4"/><rect x="348" y="70" width="22" height="76" rx="4"/></g>
+</svg>

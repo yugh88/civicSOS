@@ -1,0 +1,28 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 220" fill="none" role="img" aria-label="A hazard on the street with a fallen power line and warning cone">
+  <defs><linearGradient id="fS" x1="200" y1="0" x2="200" y2="220" gradientUnits="userSpaceOnUse"><stop stop-color="#FEF2F2"/><stop offset="1" stop-color="#F8FAFC"/></linearGradient></defs>
+  <rect width="400" height="220" fill="url(#fS)"/>
+  <path d="M0 158h400v62H0z" fill="#94A3B8" opacity=".4"/>
+  <path d="M0 154h400v6H0z" fill="#64748B" opacity=".45"/>
+  <!-- crossing -->
+  <g fill="#F8FAFC" opacity=".85"><rect x="40" y="176" width="26" height="40" rx="3"/><rect x="82" y="176" width="26" height="40" rx="3"/><rect x="124" y="176" width="26" height="40" rx="3"/></g>
+  <!-- pole with drooping wire -->
+  <rect x="300" y="42" width="9" height="116" rx="4" fill="#475569"/>
+  <rect x="268" y="52" width="72" height="8" rx="4" fill="#334155"/>
+  <path d="M272 60c-40 40-90 66-150 74" stroke="#1E293B" stroke-width="4" stroke-linecap="round"/>
+  <g fill="#FBBF24"><circle cx="150" cy="130" r="7"/><circle cx="166" cy="122" r="4"/><circle cx="136" cy="140" r="4"/></g>
+  <path d="M143 120l10-14-4 12 11-3-14 16z" fill="#FDE68A"/>
+  <!-- cone -->
+  <g transform="translate(212 96)">
+    <path d="M24 0 46 82H2z" fill="#F97316"/>
+    <path d="M13.5 46h33l3 12h-39z" fill="#FFFFFF"/>
+    <path d="M9 60h30l2 10H7z" fill="#FFF7ED" opacity=".9"/>
+    <rect x="-6" y="80" width="60" height="10" rx="5" fill="#EA580C"/>
+  </g>
+  <!-- warning sign -->
+  <g transform="translate(58 76)">
+    <path d="M26 0 52 46H0z" fill="#FBBF24"/>
+    <path d="M26 10 44 42H8z" fill="#FDE68A"/>
+    <rect x="23" y="18" width="6" height="14" rx="3" fill="#78350F"/><circle cx="26" cy="37" r="3" fill="#78350F"/>
+    <rect x="23" y="46" width="6" height="34" rx="3" fill="#94A3B8"/>
+  </g>
+</svg>
