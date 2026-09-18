@@ -15,6 +15,7 @@ import {
   placeholderLabel,
 } from '@/lib/format';
 import type { CaseDetailResponse, CaseStatus, ResolveCaseResponse } from '@/lib/types';
+import { notifyProfileChanged } from '@/lib/profile-events';
 import { CaseTimeline } from '@/components/CaseTimeline';
 import { EvidenceUploader } from '@/components/EvidenceUploader';
 import { PlanView } from '@/components/PlanView';
@@ -139,6 +140,7 @@ export default function CaseDetailPage() {
         // the figure shown is the figure written to the ledger.
         if (result?.pointsAwarded) {
           setPointsNotice({ points: result.pointsAwarded, levelUp: result.levelUp });
+          notifyProfileChanged();
         }
       } catch (caught) {
         setActionError(caught instanceof Error ? caught.message : 'That did not work.');

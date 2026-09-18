@@ -5,6 +5,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { ApiError, apiFetch } from '@/lib/api';
 import { useApi, useAuth } from '@/lib/auth';
 import { URGENCY_LABEL, URGENCY_TONE, formatDate, placeholderLabel } from '@/lib/format';
+import { notifyProfileChanged } from '@/lib/profile-events';
 import type {
   AnalyzeResponse,
   CaseRecord,
@@ -217,6 +218,7 @@ export function ReportFlow({ initialCategory }: { initialCategory?: CategoryId }
         },
       });
       setCreated(result);
+      if (result.pointsAwarded > 0) notifyProfileChanged();
       setStep('created');
       window.sessionStorage.removeItem(DRAFT_KEY);
       window.scrollTo({ top: 0, behavior: 'smooth' });

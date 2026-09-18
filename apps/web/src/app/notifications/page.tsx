@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { useCallback, useEffect, useState } from 'react';
 import { useApi, useAuth } from '@/lib/auth';
 import { formatDateTime, formatRelative } from '@/lib/format';
+import { notifyProfileChanged } from '@/lib/profile-events';
 import type { CivicNotification, MeResponse } from '@/lib/types';
 import { notificationTone } from '@/components/AppShell';
 import { Alert, Badge, Button, ButtonLink, Card, EmptyState, FilterRail, PageHeader, Skeleton } from '@/components/ui';
@@ -78,6 +79,7 @@ export default function NotificationsPage() {
       );
       try {
         await api(`/me/notifications/${notificationId}/read`, { method: 'POST', body: {} });
+        notifyProfileChanged();
       } catch {
         await load();
       }
@@ -90,6 +92,7 @@ export default function NotificationsPage() {
     try {
       await api('/me/notifications/read-all', { method: 'POST', body: {} });
       await load();
+      notifyProfileChanged();
     } catch {
       setError('We could not mark those as read. Please try again.');
     } finally {

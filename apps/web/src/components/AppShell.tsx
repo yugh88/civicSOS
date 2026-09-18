@@ -6,6 +6,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { useApi, useAuth } from '@/lib/auth';
 import { APP_NAME } from '@/lib/config';
 import { formatRelative } from '@/lib/format';
+import { onProfileChanged } from '@/lib/profile-events';
 import type { MeResponse } from '@/lib/types';
 import { Avatar, Badge, ButtonLink, Dot } from './ui';
 import {
@@ -85,6 +86,10 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     void refresh();
   }, [refresh, pathname]);
+
+  // Points and unread counts also change without a navigation — a redemption,
+  // a resolved case, a notification marked read. Listen for those too.
+  useEffect(() => onProfileChanged(() => void refresh()), [refresh]);
 
   // Close everything on navigation so no panel lingers over new content.
   useEffect(() => {

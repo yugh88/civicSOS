@@ -4,6 +4,7 @@ import { useRouter } from 'next/navigation';
 import { useCallback, useEffect, useState } from 'react';
 import { useApi, useAuth } from '@/lib/auth';
 import { formatDate } from '@/lib/format';
+import { notifyProfileChanged } from '@/lib/profile-events';
 import type { RedeemResponse, RewardView, RewardsResponse } from '@/lib/types';
 import {
   Alert,
@@ -75,6 +76,8 @@ export default function RewardsPage() {
         const result = await api<RedeemResponse>(`/rewards/${reward.rewardId}/redeem`, { method: 'POST', body: {} });
         setRedeemed(result);
         await load();
+        // The header carries the balance; it must not go stale behind us.
+        notifyProfileChanged();
         window.scrollTo({ top: 0, behavior: 'smooth' });
       } catch (caught) {
         setRedeemError(caught instanceof Error ? caught.message : 'We could not redeem that.');
