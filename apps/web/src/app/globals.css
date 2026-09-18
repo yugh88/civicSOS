@@ -1,0 +1,123 @@
+@import 'tailwindcss';
+
+/**
+ * CivicSOS design tokens.
+ *
+ * Light mode only, by product decision: this is a civic utility that people use
+ * once, often in a hurry, often on a borrowed phone. A single predictable
+ * appearance is worth more here than a theme switcher.
+ *
+ * The palette is deliberately restrained — white page, a couple of grey
+ * surfaces, one indigo accent, and status colours used only for status.
+ */
+@theme {
+  --color-ink: #111827;
+  --color-ink-soft: #374151;
+  --color-ink-muted: #6b7280;
+  --color-ink-faint: #9ca3af;
+
+  --color-surface: #ffffff;
+  --color-surface-soft: #f9fafb;
+  --color-surface-sunken: #f3f4f6;
+  --color-line: #e5e7eb;
+  --color-line-strong: #d1d5db;
+
+  --color-accent: #4f46e5;
+  --color-accent-hover: #4338ca;
+  --color-accent-soft: #eef2ff;
+  --color-accent-line: #c7d2fe;
+
+  --color-good: #047857;
+  --color-good-soft: #ecfdf5;
+  --color-good-line: #a7f3d0;
+
+  --color-warn: #b45309;
+  --color-warn-soft: #fffbeb;
+  --color-warn-line: #fde68a;
+
+  --color-bad: #b91c1c;
+  --color-bad-soft: #fef2f2;
+  --color-bad-line: #fecaca;
+
+  --font-sans:
+    ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, 'Noto Sans',
+    sans-serif;
+
+  --radius-card: 1rem;
+}
+
+/* Force light rendering: no dark mode anywhere in this product. */
+:root {
+  color-scheme: light;
+}
+
+html {
+  -webkit-text-size-adjust: 100%;
+}
+
+body {
+  background-color: var(--color-surface);
+  color: var(--color-ink);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+/* A single, consistent, clearly visible focus ring for keyboard users. */
+:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 2px;
+  border-radius: 0.375rem;
+}
+
+/* Remove the ring for pointer users without removing it for keyboard users. */
+:focus:not(:focus-visible) {
+  outline: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+/* Skeleton shimmer used by the loading states. */
+@keyframes civic-pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.45;
+  }
+}
+
+.skeleton {
+  animation: civic-pulse 1.6s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+  background-color: var(--color-surface-sunken);
+  border-radius: 0.5rem;
+}
+
+/* Visually hidden but available to screen readers. */
+.sr-only-focusable:not(:focus) {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border-width: 0;
+}
+
+/* Preserve the line breaks in a generated complaint letter. */
+.letter {
+  white-space: pre-wrap;
+  word-break: break-word;
+  font-variant-ligatures: none;
+}

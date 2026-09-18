@@ -1,0 +1,68 @@
+name: CI
+
+# Runs on every push and pull request. Deliberately does NOT deploy: deployment
+# needs AWS credentials, and an automatic deploy on every push to a free-tier
+# account is a good way to get a surprise bill. See DEPLOYMENT.md.
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    name: Typecheck, test and build
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Typecheck every workspace
+        run: npm run typecheck
+
+      - name: Unit, API and authorization tests
+        run: npm test
+
+      - name: Build shared packages
+        run: |
+          npm run build -w @civicsos/core
+          npm run build -w @civicsos/aws
+
+      - name: Production build of the web app
+        run: npm run build -w @civicsos/web
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Synthesize infrastructure
+        # Synth needs no AWS credentials and catches CDK errors before a deploy.
+        run: npm run cdk -w @civicsos/infra -- synth -c stage=ci -c allowedOrigins=http://localhost:3000 --quiet
+
+      - name: Check the OpenAPI document is up to date
+        run: |
+          npm run openapi
+          git diff --exit-code -- docs/openapi.json \
+            || (echo "::error::docs/openapi.json is stale. Run 'npm run openapi' and commit the result."; exit 1)
+
+      - name: Fail if a secret was committed
+        run: |
+          # A cheap, targeted guard: real secret scanning is GitHub's job, but a
+          # committed Gemini key or AWS access key should never reach main.
+          if git grep -nIE "(AIza[0-9A-Za-z_-]{30,}|AKIA[0-9A-Z]{16}|aws_secret_access_key\s*=)" -- \
+               . ':(exclude).github/workflows/ci.yml'; then
+            echo "::error::A credential-shaped string is committed. Remove it and rotate the key."
+            exit 1
+          fi

@@ -1,0 +1,67 @@
+name: Deploy
+
+# Manual only, and manual on purpose.
+#
+# The project targets the AWS free tier, so deployments are a deliberate act
+# rather than a side effect of merging. Configure the repository with an OIDC
+# role (recommended) or access keys before using this workflow — DEPLOYMENT.md
+# has the exact IAM policy.
+on:
+  workflow_dispatch:
+    inputs:
+      stage:
+        description: Deployment stage
+        required: true
+        default: dev
+        type: choice
+        options: [dev, prod]
+      allowedOrigins:
+        description: Comma-separated browser origins allowed to call the API
+        required: true
+        type: string
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  deploy:
+    name: Deploy infrastructure
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    environment: ${{ inputs.stage }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - run: npm ci
+
+      # Never deploy something that does not pass its own tests.
+      - name: Verify before deploying
+        run: |
+          npm run typecheck
+          npm test
+          npm run build -w @civicsos/core
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_DEPLOY_ROLE_ARN }}
+          aws-region: ${{ vars.AWS_REGION }}
+
+      - name: Deploy
+        run: |
+          npm run cdk -w @civicsos/infra -- deploy \
+            -c stage=${{ inputs.stage }} \
+            -c allowedOrigins='${{ inputs.allowedOrigins }}' \
+            -c alertEmail='${{ secrets.ALERT_EMAIL }}' \
+            --require-approval never \
+            --outputs-file infra-outputs.json
+
+      - name: Show stack outputs
+        run: cat infra-outputs.json

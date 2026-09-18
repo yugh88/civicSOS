@@ -1,0 +1,24 @@
+node_modules/
+.next/
+out/
+dist/
+build/
+cdk.out/
+*.tsbuildinfo
+coverage/
+
+# secrets & local env
+.env
+.env.local
+.env.*.local
+*.pem
+.aws-exports.json
+amplify_outputs.json
+infra-outputs.json
+
+# os / editor
+.DS_Store
+.idea/
+.vscode/
+*.log
+npm-debug.log*

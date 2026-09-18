@@ -1,0 +1,30 @@
+{
+  "name": "civicsos",
+  "version": "1.0.0",
+  "private": true,
+  "description": "CivicSOS — tell it what happened, it figures out what you should do next.",
+  "license": "MIT",
+  "workspaces": [
+    "packages/core",
+    "packages/aws",
+    "packages/infra",
+    "apps/web"
+  ],
+  "scripts": {
+    "build": "npm run build -w @civicsos/core && npm run build -w @civicsos/aws && npm run build -w @civicsos/web",
+    "build:core": "npm run build -w @civicsos/core",
+    "dev": "npm run dev -w @civicsos/web",
+    "test": "npm run test -w @civicsos/core",
+    "test:watch": "npm run test:watch -w @civicsos/core",
+    "typecheck": "npm run typecheck --workspaces --if-present",
+    "lint": "npm run lint -w @civicsos/web",
+    "verify": "npm run typecheck && npm run test && npm run build",
+    "cdk": "npm run cdk -w @civicsos/infra --",
+    "deploy:infra": "npm run deploy -w @civicsos/infra",
+    "openapi": "node scripts/generate-openapi.mjs"
+  },
+  "engines": { "node": ">=20" },
+  "devDependencies": {
+    "typescript": "^5.6.3"
+  }
+}
