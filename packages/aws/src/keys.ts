@@ -14,6 +14,9 @@
  *   Notification  USER#<userId>        / NTF#<notificationId>
  *   Idempotency   IDEMP#<owner>#<key>  / META
  *   Audit         AUDIT#<YYYY-MM-DD>   / <auditId>
+ *   PointsEntry   USER#<userId>        / PTS#<entryId>
+ *   PointsDedupe  USER#<userId>        / PTSKEY#<dedupeKey>
+ *   Redemption    USER#<userId>        / RDM#<redemptionId>
  *
  * Indexes:
  *   gsi1 byOwner     OWNER#<ownerId>      / <createdAt>#<caseId>
@@ -40,6 +43,14 @@ export const evidenceSk = (evidenceId: string) => `EVD#${evidenceId}`;
 export const userPk = (userId: string) => `USER#${userId}`;
 export const USER_SK = 'PROFILE';
 export const notificationSk = (notificationId: string) => `NTF#${notificationId}`;
+
+export const pointsSk = (entryId: string) => `PTS#${entryId}`;
+/**
+ * Marker row that makes a points award idempotent. Written conditionally in the
+ * same transaction as the ledger entry, so a replayed award writes neither.
+ */
+export const pointsDedupeSk = (dedupeKey: string) => `PTSKEY#${dedupeKey}`;
+export const redemptionSk = (redemptionId: string) => `RDM#${redemptionId}`;
 
 export const idempotencyPk = (ownerId: string, key: string) => `IDEMP#${ownerId}#${key}`;
 export const auditPk = (day: string) => `AUDIT#${day}`;

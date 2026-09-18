@@ -229,8 +229,16 @@ Create a tracked case.
   description server-side.
 
 ```json
-{ "case": { "caseId": "case_0mu5wvurdb530vm2n", "status": "READY_TO_SUBMIT", "...": "..." }, "created": true }
+{
+  "case": { "caseId": "case_0mu5wvurdb530vm2n", "status": "READY_TO_SUBMIT", "...": "..." },
+  "created": true,
+  "pointsAwarded": 60,
+  "awards": [{ "reason": "REPORT_CREATED", "delta": 50 }, { "reason": "COMPLETE_INFORMATION", "delta": 10 }]
+}
 ```
+
+A replayed creation returns `created: false` and `pointsAwarded: 0` — the
+idempotency key prevents both a duplicate case and a duplicate award.
 
 Status is `READY_TO_SUBMIT` when the complaint has no remaining placeholders,
 otherwise `DRAFT`.
@@ -340,9 +348,15 @@ Returns the full case detail, so the client does not need a second request.
 { "outcome": "FIXED", "resolutionNote": "Cleared and collection restarted." }
 ```
 
+```json
+{ "case": { "...": "..." }, "pointsAwarded": 100, "levelUp": "Silver Citizen" }
+```
+
 `outcome` is `FIXED` (→ `RESOLVED`) or `CLOSED_WITHOUT_FIX` (→
 `CLOSED_UNRESOLVED`). Both clear `followUpAt`, which removes the case from the
-reminder index — so a closed case can never generate another reminder.
+reminder index — so a closed case can never generate another reminder. Only
+`FIXED` awards points; `levelUp` is present when the award crossed a level
+boundary.
 
 ---
 
@@ -394,17 +408,97 @@ returned.
 
 ---
 
+### Civic Points and rewards
+
+#### `GET /rewards`
+
+Catalogue plus the signed-in citizen's balance, level and past redemptions.
+Affordability and eligibility are decided server-side; `lockedReason` is written
+for display so the UI can explain a lock rather than show a dead button.
+
+```json
+{
+  "balance": 220,
+  "lifetimePoints": 220,
+  "level": { "level": { "id": "BRONZE", "label": "Bronze Citizen", "minPoints": 0, "blurb": "..." },
+             "next": { "id": "SILVER", "label": "Silver Citizen", "minPoints": 250, "blurb": "..." },
+             "pointsToNext": 30, "progress": 0.88 },
+  "rewards": [{
+    "rewardId": "voucher-local-cafe", "partner": "Corner Chai Co. (demo partner)",
+    "name": "₹100 café voucher", "category": "VOUCHER", "pointsRequired": 150,
+    "emoji": "☕", "isSampleCatalog": true,
+    "affordable": true, "eligible": true, "pointsShort": 0
+  }],
+  "redemptions": [],
+  "disclaimer": "This is a demo catalogue...",
+  "isSampleCatalog": true
+}
+```
+
+> **`isSampleCatalog`** is the honesty flag. The catalogue shipped with the
+> project uses fictional partners and issues `DEMO-` codes with no monetary
+> value. CivicSOS claims no sponsor relationships.
+
+#### `POST /rewards/{rewardId}/redeem` · 201
+
+Debits the balance through the points ledger and records the redemption.
+
+```json
+{
+  "redemption": {
+    "redemptionId": "rdm_...", "rewardId": "voucher-local-cafe",
+    "rewardName": "₹100 café voucher", "pointsSpent": 150,
+    "code": "DEMO-VOU-9ECFAB", "createdAt": "..."
+  },
+  "balance": 70
+}
+```
+
+- 403 when the citizen has not reached a level-gated reward's minimum level.
+- 409 when the balance is insufficient, with the shortfall in the message.
+- 404 for an unknown reward id.
+
+Spending reduces `balance` but never `lifetimePoints`, so redeeming cannot
+demote a citizen's level.
+
+#### How points are earned
+
+Amounts are fixed server-side and never read from a request body.
+
+| Reason | Points | Awarded |
+| --- | --- | --- |
+| `REPORT_CREATED` | 50 | On case creation |
+| `COMPLETE_INFORMATION` | 10 | When the complaint has no remaining placeholders and a location |
+| `EVIDENCE_PROVIDED` | 10 | On the first confirmed evidence upload for a case |
+| `CASE_RESOLVED` | 100 | On `outcome: FIXED` only |
+
+Each reason is awarded **at most once per case**, enforced by a ledger dedupe key
+of `<reason>#<caseId>` written conditionally. `POST /cases` and
+`POST /cases/{id}/resolve` return `pointsAwarded` — the amount actually written
+to the ledger, so a client can display it without computing anything itself.
+
 ### Profile
 
 #### `GET /me`
 
 ```json
 {
-  "profile": { "userId": "...", "email": "...", "displayName": "Alice", "role": "CITIZEN", "defaultLocation": { "city": "Pune" } },
+  "profile": {
+    "userId": "...", "email": "...", "displayName": "Alice", "role": "CITIZEN",
+    "defaultLocation": { "city": "Pune" },
+    "civicPoints": 220, "lifetimePoints": 220, "casesReported": 4, "casesResolved": 1
+  },
   "role": "CITIZEN",
-  "notifications": [{ "notificationId": "...", "caseId": "...", "kind": "FOLLOW_UP_DUE", "title": "Time to follow up", "body": "...", "read": false, "createdAt": "..." }]
+  "notifications": [{ "notificationId": "...", "caseId": "...", "kind": "FOLLOW_UP_DUE", "title": "Time to follow up", "body": "...", "read": false, "createdAt": "..." }],
+  "unreadCount": 2,
+  "level": { "level": { "id": "BRONZE", "label": "Bronze Citizen" }, "next": { "id": "SILVER", "label": "Silver Citizen" }, "pointsToNext": 30, "progress": 0.88 },
+  "impact": { "casesReported": 4, "casesResolved": 1, "civicPoints": 220, "lifetimePoints": 220 },
+  "pointsHistory": [{ "entryId": "pts_...", "reason": "CASE_RESOLVED", "delta": 100, "label": "Problem resolved", "caseId": "case_...", "createdAt": "..." }]
 }
 ```
+
+Notification `kind` is one of `FOLLOW_UP_DUE`, `ESCALATION_AVAILABLE`,
+`CASE_CREATED`, `POINTS_EARNED` or `REWARD_AVAILABLE`.
 
 #### `PATCH /me`
 
@@ -412,9 +506,19 @@ returned.
 { "displayName": "Alice Fernandes", "defaultLocation": { "locality": "12th Main", "city": "Bengaluru" } }
 ```
 
-`role` in the body is ignored — it always comes from the token.
+`role` in the body is ignored — it always comes from the token. So are
+`civicPoints`, `lifetimePoints`, `casesReported` and `casesResolved`: those are
+server-owned counters, and a profile edit is not a way to rewrite them.
 
 #### `POST /me/notifications/{notificationId}/read`
+
+```json
+{ "ok": true }
+```
+
+#### `POST /me/notifications/read-all`
+
+Marks every unread reminder as read.
 
 ```json
 { "ok": true }

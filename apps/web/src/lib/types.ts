@@ -7,6 +7,13 @@
  */
 export type {
   AnalysisResult,
+  CitizenLevel,
+  CitizenLevelId,
+  PointsEntry,
+  PointReason,
+  Redemption,
+  RewardCategory,
+  RewardRecord,
   AuditEvent,
   AuthorityRecord,
   CaseEvent,
@@ -83,6 +90,24 @@ export interface UploadReservationResponse {
   maxBytes: number;
 }
 
+export interface CivicNotification {
+  notificationId: string;
+  caseId: string;
+  kind: string;
+  title: string;
+  body: string;
+  read: boolean;
+  createdAt: string;
+}
+
+export interface LevelProgressView {
+  level: { id: string; label: string; minPoints: number; blurb: string };
+  next?: { id: string; label: string; minPoints: number; blurb: string };
+  pointsToNext: number;
+  /** 0–1 through the current level. */
+  progress: number;
+}
+
 export interface MeResponse {
   profile: {
     userId: string;
@@ -90,17 +115,89 @@ export interface MeResponse {
     displayName?: string;
     role: string;
     defaultLocation?: { locality?: string; city?: string; state?: string };
+    civicPoints: number;
+    lifetimePoints: number;
+    casesReported: number;
+    casesResolved: number;
   };
   role: string;
-  notifications: Array<{
-    notificationId: string;
-    caseId: string;
-    kind: string;
-    title: string;
-    body: string;
-    read: boolean;
+  notifications: CivicNotification[];
+  unreadCount: number;
+  level: LevelProgressView;
+  impact: {
+    casesReported: number;
+    casesResolved: number;
+    civicPoints: number;
+    lifetimePoints: number;
+  };
+  pointsHistory: Array<{
+    entryId: string;
+    reason: string;
+    delta: number;
+    label: string;
+    caseId?: string;
+    rewardId?: string;
     createdAt: string;
   }>;
+}
+
+export interface RewardView {
+  rewardId: string;
+  partner: string;
+  name: string;
+  description: string;
+  category: 'VOUCHER' | 'PRODUCT' | 'EXPERIENCE';
+  pointsRequired: number;
+  emoji: string;
+  isSampleCatalog: boolean;
+  minLevel?: string;
+  affordable: boolean;
+  eligible: boolean;
+  pointsShort: number;
+  lockedReason?: string;
+}
+
+export interface RewardsResponse {
+  balance: number;
+  lifetimePoints: number;
+  level: LevelProgressView;
+  rewards: RewardView[];
+  redemptions: Array<{
+    redemptionId: string;
+    rewardId: string;
+    rewardName: string;
+    pointsSpent: number;
+    code: string;
+    createdAt: string;
+  }>;
+  disclaimer: string;
+  isSampleCatalog: boolean;
+}
+
+export interface RedeemResponse {
+  redemption: {
+    redemptionId: string;
+    rewardId: string;
+    rewardName: string;
+    pointsSpent: number;
+    code: string;
+    createdAt: string;
+  };
+  balance: number;
+}
+
+export interface CreateCaseResponse {
+  case: CaseRecord;
+  created: boolean;
+  /** Points actually written to the ledger — never a client-side guess. */
+  pointsAwarded: number;
+  awards: Array<{ reason: string; delta: number; levelUp?: string }>;
+}
+
+export interface ResolveCaseResponse {
+  case: CaseRecord;
+  pointsAwarded: number;
+  levelUp?: string;
 }
 
 export interface KnowledgeResponse {

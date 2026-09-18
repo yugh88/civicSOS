@@ -36,6 +36,7 @@ export { addDays, dayKey, daysBetween, isPast, isoAddDays, isoNow, unixSeconds }
 
 // Knowledge layer
 export * from './knowledge/index.js';
+export { REWARDS, REWARDS_DISCLAIMER, getReward } from './knowledge/rewards.js';
 
 // Rules engine
 export {
@@ -56,6 +57,18 @@ export {
 export { assessEscalation, computeFollowUpDate, nextEscalationDate, nextEscalationStep } from './rules/followup.js';
 export { assembleAnalysis, buildCasePlan, buildResolutionPlan } from './rules/resolution.js';
 export { STATUS_HINTS, STATUS_LABELS, assertTransition, canTransition, isOpen } from './rules/status.js';
+export {
+  LEVELS,
+  POINT_LABELS,
+  POINT_VALUES,
+  awardKey,
+  earnsCompletenessBonus,
+  levelById,
+  levelFor,
+  levelProgress,
+  meetsLevel,
+  type LevelProgress,
+} from './rules/points.js';
 
 // Schemas
 export * from './schemas/common.js';
@@ -88,6 +101,8 @@ export { CaseService, type CaseDetail } from './services/case-service.js';
 export { EvidenceService, MAX_EVIDENCE_PER_CASE, type EvidenceView } from './services/evidence-service.js';
 export { ReminderService, type ReminderSweepResult } from './services/reminder-service.js';
 export { AdminService, type AdminOverview } from './services/admin-service.js';
+export { PointsService, type AwardResult } from './services/points-service.js';
+export { RewardsService, type RewardView, type RewardsOverview } from './services/rewards-service.js';
 export { createAuditWriter, type AuditWriter } from './services/audit.js';
 export {
   assertCanReadCase,
@@ -115,5 +130,5 @@ export {
 } from './http/auth.js';
 
 // Demo
-export { DEMO_OWNER_ID, seedDemoData, type SeedResult } from './demo/seed.js';
+export { DEMO_OWNER_ID, DEMO_POINTS, seedDemoData, type SeedResult } from './demo/seed.js';
 export { seedGuestDemoData } from './demo/guest.js';

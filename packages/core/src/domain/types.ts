@@ -77,8 +77,96 @@ export interface UserProfile {
   displayName?: string;
   role: Role;
   defaultLocation?: LocationInput;
+  /** Spendable balance. Server-maintained; never accepted from a client. */
+  civicPoints: number;
+  /** Total ever earned. Drives the citizen level, so redeeming never demotes. */
+  lifetimePoints: number;
+  /** Impact counters, incremented atomically alongside points. */
+  casesReported: number;
+  casesResolved: number;
   createdAt: string;
   updatedAt: string;
+}
+
+/**
+ * Civic Points.
+ *
+ * The point of points is to reward *useful* civic participation — a complete,
+ * evidenced report that actually gets resolved — not volume. Every award is
+ * calculated on the server and written through an idempotent ledger, so a
+ * replayed request, a double-tapped button or a tampered client payload cannot
+ * mint points.
+ */
+export const POINT_REASONS = [
+  'REPORT_CREATED',
+  'COMPLETE_INFORMATION',
+  'EVIDENCE_PROVIDED',
+  'CASE_RESOLVED',
+  'REWARD_REDEEMED',
+] as const;
+export type PointReason = (typeof POINT_REASONS)[number];
+
+export interface PointsEntry {
+  entryId: string;
+  userId: string;
+  reason: PointReason;
+  /** Positive for an award, negative for a redemption. */
+  delta: number;
+  /** Human-readable, shown in the profile's activity list. */
+  label: string;
+  caseId?: string;
+  rewardId?: string;
+  /**
+   * Deduplication key, unique per user. Awards use `<reason>#<caseId>` so a
+   * reason can be earned at most once per case, however many times the
+   * triggering request is replayed.
+   */
+  dedupeKey: string;
+  createdAt: string;
+}
+
+export const CITIZEN_LEVELS = ['BRONZE', 'SILVER', 'GOLD', 'CHAMPION'] as const;
+export type CitizenLevelId = (typeof CITIZEN_LEVELS)[number];
+
+export interface CitizenLevel {
+  id: CitizenLevelId;
+  label: string;
+  /** Lifetime points required to reach this level. */
+  minPoints: number;
+  blurb: string;
+}
+
+export const REWARD_CATEGORIES = ['VOUCHER', 'PRODUCT', 'EXPERIENCE'] as const;
+export type RewardCategory = (typeof REWARD_CATEGORIES)[number];
+
+export interface RewardRecord {
+  rewardId: string;
+  /** Partner name. Every catalogue entry shipped with the MVP is fictional. */
+  partner: string;
+  name: string;
+  description: string;
+  category: RewardCategory;
+  pointsRequired: number;
+  /** Emoji used as the card's visual mark — no image hosting required. */
+  emoji: string;
+  /**
+   * True for the placeholder catalogue shipped with the project. The UI renders
+   * a visible badge, because claiming an unconfirmed sponsor would be a lie.
+   */
+  isSampleCatalog: boolean;
+  /** Minimum citizen level, when a reward is level-gated. */
+  minLevel?: CitizenLevelId;
+}
+
+export interface Redemption {
+  redemptionId: string;
+  userId: string;
+  rewardId: string;
+  rewardName: string;
+  pointsSpent: number;
+  /** Placeholder voucher code for the demo catalogue. */
+  code: string;
+  createdAt: string;
 }
 
 export interface EvidenceItem {
@@ -249,7 +337,7 @@ export interface NotificationRecord {
   notificationId: string;
   userId: string;
   caseId: string;
-  kind: 'FOLLOW_UP_DUE' | 'ESCALATION_AVAILABLE' | 'CASE_CREATED';
+  kind: 'FOLLOW_UP_DUE' | 'ESCALATION_AVAILABLE' | 'CASE_CREATED' | 'POINTS_EARNED' | 'REWARD_AVAILABLE';
   title: string;
   body: string;
   read: boolean;

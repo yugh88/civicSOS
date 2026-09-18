@@ -5,8 +5,16 @@ import { useParams, useRouter } from 'next/navigation';
 import { useCallback, useEffect, useState } from 'react';
 import { ApiError } from '@/lib/api';
 import { useApi, useAuth } from '@/lib/auth';
-import { STATUS_TONE, formatDate, formatDateTime, formatRelative, placeholderLabel } from '@/lib/format';
-import type { CaseDetailResponse } from '@/lib/types';
+import {
+  STATUS_TONE,
+  URGENCY_LABEL,
+  URGENCY_TONE,
+  formatDate,
+  formatDateTime,
+  formatRelative,
+  placeholderLabel,
+} from '@/lib/format';
+import type { CaseDetailResponse, CaseStatus, ResolveCaseResponse } from '@/lib/types';
 import { CaseTimeline } from '@/components/CaseTimeline';
 import { EvidenceUploader } from '@/components/EvidenceUploader';
 import { PlanView } from '@/components/PlanView';
@@ -15,24 +23,38 @@ import {
   Alert,
   Badge,
   Button,
+  ButtonLink,
   Card,
   DemoBadge,
+  Dot,
   Field,
   Input,
+  PointsPill,
   SectionHeading,
   Skeleton,
   Textarea,
 } from '@/components/ui';
+import {
+  CategoryIcon,
+  IconArrowLeft,
+  IconCamera,
+  IconCheck,
+  IconClock,
+  IconDocument,
+  IconEscalate,
+  IconLocation,
+  IconSend,
+} from '@/components/icons';
 
 /**
  * Case detail: the tracking screen.
  *
- * Holds the whole later half of the journey — record the official submission,
- * log a follow-up, escalate when the waiting window has passed, attach
- * evidence, and close the case. Every one of those actions is gated by the
- * server's rules engine; the buttons here reflect what the server has already
- * said is possible, and a refusal comes back as a plain explanation rather than
- * a disabled button with no reason.
+ * Holds the later half of the journey — record the official submission, log a
+ * follow-up, escalate once the waiting window has passed, attach evidence, and
+ * close the case. Every action is gated by the server's rules engine; the
+ * buttons reflect what the server has already said is possible, and a refusal
+ * comes back as a plain explanation rather than a disabled control with no
+ * reason attached.
  */
 
 const STATUS_LABELS: Record<string, string> = {
@@ -55,6 +77,16 @@ const STATUS_HINTS: Record<string, string> = {
   CLOSED_UNRESOLVED: 'Closed without resolution. You can still escalate this later.',
 };
 
+/** The five milestones shown as the case's headline progress. */
+const PROGRESS_STAGES = ['Reported', 'Analysed', 'Submitted', 'In progress', 'Resolved'] as const;
+
+function stageIndex(status: CaseStatus, submitted: boolean): number {
+  if (status === 'RESOLVED' || status === 'CLOSED_UNRESOLVED') return 4;
+  if (status === 'AWAITING_RESPONSE' || status === 'ESCALATED') return 3;
+  if (submitted) return 2;
+  return 1;
+}
+
 type Panel = 'plan' | 'complaint' | 'evidence' | 'history';
 
 export default function CaseDetailPage() {
@@ -70,6 +102,7 @@ export default function CaseDetailPage() {
   const [panel, setPanel] = useState<Panel>('plan');
   const [actionError, setActionError] = useState<string | undefined>();
   const [actionNotice, setActionNotice] = useState<string | undefined>();
+  const [pointsNotice, setPointsNotice] = useState<{ points: number; levelUp?: string } | undefined>();
   const [busy, setBusy] = useState<string | undefined>();
 
   useEffect(() => {
@@ -78,8 +111,7 @@ export default function CaseDetailPage() {
 
   const load = useCallback(async () => {
     try {
-      const result = await api<CaseDetailResponse>(`/cases/${caseId}`);
-      setDetail(result);
+      setDetail(await api<CaseDetailResponse>(`/cases/${caseId}`));
       setError(undefined);
     } catch (caught) {
       setError(caught instanceof Error ? caught : new Error('We could not load this case.'));
@@ -98,10 +130,16 @@ export default function CaseDetailPage() {
       setBusy(key);
       setActionError(undefined);
       setActionNotice(undefined);
+      setPointsNotice(undefined);
       try {
-        await api(path, { method: 'POST', body });
+        const result = await api<Partial<ResolveCaseResponse>>(path, { method: 'POST', body });
         await load();
         setActionNotice(successMessage);
+        // Points come back from the server with the action's own response, so
+        // the figure shown is the figure written to the ledger.
+        if (result?.pointsAwarded) {
+          setPointsNotice({ points: result.pointsAwarded, levelUp: result.levelUp });
+        }
       } catch (caught) {
         setActionError(caught instanceof Error ? caught.message : 'That did not work.');
       } finally {
@@ -117,13 +155,18 @@ export default function CaseDetailPage() {
   if (error) {
     const notFound = error instanceof ApiError && error.status === 404;
     return (
-      <div className="space-y-4">
-        <Alert tone={notFound ? 'neutral' : 'bad'} title={notFound ? 'We could not find that case' : 'Something went wrong'}>
-          <p>{notFound ? 'It may have been removed, or it may belong to a different account.' : error.message}</p>
+      <div className="mx-auto max-w-lg space-y-4 py-8">
+        <Alert
+          tone={notFound ? 'neutral' : 'bad'}
+          title={notFound ? 'We could not find that case' : 'Something went wrong'}
+        >
+          {notFound
+            ? 'It may have been removed, or it may belong to a different account.'
+            : error.message}
         </Alert>
-        <Link href="/cases">
-          <Button variant="secondary">Back to my cases</Button>
-        </Link>
+        <ButtonLink href="/cases" variant="secondary" icon={<IconArrowLeft className="h-4 w-4" />}>
+          Back to my cases
+        </ButtonLink>
       </div>
     );
   }
@@ -133,6 +176,7 @@ export default function CaseDetailPage() {
   const { case: record, plan, escalation, timeline, outstandingPlaceholders } = detail;
   const isClosed = record.status === 'RESOLVED' || record.status === 'CLOSED_UNRESOLVED';
   const canMarkSubmitted = !record.submittedAt && !isClosed;
+  const stage = stageIndex(record.status, Boolean(record.submittedAt));
 
   const panels: Array<{ id: Panel; label: string; count?: number }> = [
     { id: 'plan', label: 'What happens next' },
@@ -143,29 +187,52 @@ export default function CaseDetailPage() {
 
   return (
     <div className="space-y-6">
-      <Link href="/cases" className="inline-flex items-center gap-1 text-sm font-medium text-accent hover:underline">
-        <span aria-hidden="true">←</span> My cases
+      <Link
+        href="/cases"
+        className="inline-flex items-center gap-1.5 text-sm font-medium text-accent transition-colors hover:text-accent-hover"
+      >
+        <IconArrowLeft className="h-4 w-4" />
+        My cases
       </Link>
 
-      <header className="space-y-3">
+      {/* ---------------------------------------------------------------- */}
+      {/* Header                                                           */}
+      {/* ---------------------------------------------------------------- */}
+      <header className="space-y-4">
         <div className="flex flex-wrap items-center gap-2">
-          <Badge tone={STATUS_TONE[record.status]}>{STATUS_LABELS[record.status]}</Badge>
-          <Badge tone="accent">{plan.categoryLabel}</Badge>
+          <Badge tone={STATUS_TONE[record.status]} icon={<Dot tone={STATUS_TONE[record.status]} />}>
+            {STATUS_LABELS[record.status]}
+          </Badge>
+          <Badge tone="accent" icon={<CategoryIcon categoryId={record.categoryId} className="h-3.5 w-3.5" />}>
+            {plan.categoryLabel}
+          </Badge>
+          <Badge tone={URGENCY_TONE[record.urgency]}>{URGENCY_LABEL[record.urgency]}</Badge>
           {record.isDemo ? <DemoBadge /> : null}
         </div>
-        <h1 className="text-2xl font-semibold leading-snug tracking-tight text-ink">{record.summary}</h1>
-        <p className="text-sm text-ink-muted">{STATUS_HINTS[record.status]}</p>
 
-        <dl className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-          <Fact label="Location">
+        <h1 className="text-[26px] font-semibold leading-snug tracking-tight text-ink sm:text-[30px]">
+          {record.summary}
+        </h1>
+        <p className="text-[15px] text-ink-muted">{STATUS_HINTS[record.status]}</p>
+
+        <ProgressRail stage={stage} closedWithoutFix={record.status === 'CLOSED_UNRESOLVED'} />
+
+        <dl className="grid gap-2.5 sm:grid-cols-2 lg:grid-cols-4">
+          <Fact label="Location" icon={<IconLocation className="h-4 w-4" />}>
             {[record.location.locality, record.location.city, record.location.state].filter(Boolean).join(', ') ||
               'Not specified'}
           </Fact>
-          <Fact label="Created">{formatDate(record.createdAt)}</Fact>
-          <Fact label={record.submittedAt ? 'Submitted' : 'Not yet submitted'}>
-            {record.submittedAt ? formatDate(record.submittedAt) : '—'}
+          <Fact label="Reported" icon={<IconClock className="h-4 w-4" />}>
+            {formatDate(record.createdAt)}
           </Fact>
-          <Fact label={isClosed ? 'Closed' : 'Follow up'}>
+          <Fact label="Reference" icon={<IconDocument className="h-4 w-4" />}>
+            {record.officialReference ? (
+              <span className="font-mono">{record.officialReference}</span>
+            ) : (
+              <span className="text-ink-muted">Not submitted yet</span>
+            )}
+          </Fact>
+          <Fact label={isClosed ? 'Closed' : 'Follow up'} icon={<IconSend className="h-4 w-4" />}>
             {isClosed
               ? formatDate(record.resolvedAt)
               : record.followUpAt
@@ -173,15 +240,23 @@ export default function CaseDetailPage() {
                 : '—'}
           </Fact>
         </dl>
-
-        {record.officialReference ? (
-          <p className="text-sm text-ink-muted">
-            Official reference: <span className="font-mono font-medium text-ink">{record.officialReference}</span>
-          </p>
-        ) : null}
       </header>
 
-      {actionNotice ? <Alert tone="good">{actionNotice}</Alert> : null}
+      {pointsNotice ? (
+        <Alert tone="gold" title={pointsNotice.levelUp ? `You reached ${pointsNotice.levelUp}` : 'Civic Points earned'}>
+          <div className="flex flex-wrap items-center gap-3">
+            <PointsPill points={pointsNotice.points} size="md" />
+            <span>Your problem was resolved — thank you for seeing it through.</span>
+          </div>
+        </Alert>
+      ) : null}
+
+      {actionNotice && !pointsNotice ? (
+        <Alert tone="good" icon={<IconCheck className="h-[18px] w-[18px]" />}>
+          {actionNotice}
+        </Alert>
+      ) : null}
+
       {actionError ? (
         <Alert tone="bad" title="We could not do that">
           {actionError}
@@ -205,7 +280,12 @@ export default function CaseDetailPage() {
         busy={busy}
         canMarkSubmitted={canMarkSubmitted}
         onSubmitted={(reference, channel) =>
-          act('submitted', `/cases/${caseId}/submitted`, { officialReference: reference, channel }, 'Recorded as submitted.')
+          act(
+            'submitted',
+            `/cases/${caseId}/submitted`,
+            { officialReference: reference, channel },
+            'Recorded as submitted. We will remind you when to follow up.',
+          )
         }
         onFollowUp={(note) => act('followup', `/cases/${caseId}/follow-up`, { note }, 'Follow-up logged.')}
         onEscalate={() =>
@@ -221,39 +301,42 @@ export default function CaseDetailPage() {
         }
       />
 
+      {/* ---------------------------------------------------------------- */}
+      {/* Panels                                                           */}
+      {/* ---------------------------------------------------------------- */}
       <div>
-        <div role="tablist" aria-label="Case sections" className="flex flex-wrap gap-2 border-b border-line pb-3">
+        <div
+          role="tablist"
+          aria-label="Case sections"
+          className="no-scrollbar -mx-4 flex gap-1 overflow-x-auto border-b border-line px-4 pb-3 sm:mx-0 sm:px-0"
+        >
           {panels.map((option) => (
             <button
               key={option.id}
               role="tab"
+              type="button"
               id={`tab-${option.id}`}
               aria-selected={panel === option.id}
               aria-controls={`panel-${option.id}`}
               onClick={() => setPanel(option.id)}
-              className={`rounded-lg px-3.5 py-2 text-sm font-medium transition-colors ${
-                panel === option.id ? 'bg-accent-soft text-accent' : 'text-ink-soft hover:bg-surface-soft'
+              className={`shrink-0 rounded-xl px-3.5 py-2 text-sm font-medium transition-colors duration-150 ${
+                panel === option.id ? 'bg-accent-soft text-accent-ink' : 'text-ink-soft hover:bg-surface-soft'
               }`}
             >
               {option.label}
-              {option.count ? <span className="ml-1.5 text-xs text-ink-faint">{option.count}</span> : null}
+              {option.count ? <span className="ml-1.5 tabular-nums text-ink-faint">{option.count}</span> : null}
             </button>
           ))}
         </div>
 
-        <div
-          role="tabpanel"
-          id={`panel-${panel}`}
-          aria-labelledby={`tab-${panel}`}
-          tabIndex={-1}
-          className="pt-6"
-        >
+        <div role="tabpanel" id={`panel-${panel}`} aria-labelledby={`tab-${panel}`} tabIndex={-1} className="pt-6">
           {panel === 'plan' ? (
             <PlanView
               plan={plan}
+              hideSummary
               notice={
                 escalation.followUpOverdue ? (
-                  <Alert tone="warn" title="This is past its follow-up date">
+                  <Alert tone="warn" title="This is past its follow-up date" icon={<IconClock className="h-[18px] w-[18px]" />}>
                     {escalation.reason}
                   </Alert>
                 ) : undefined
@@ -268,6 +351,13 @@ export default function CaseDetailPage() {
               <SectionHeading
                 title="Evidence"
                 description="Photos and documents you can attach to your complaint. Only you can see these."
+                aside={
+                  record.evidenceCount === 0 && !isClosed ? (
+                    <Badge tone="gold" icon={<IconCamera className="h-3.5 w-3.5" />}>
+                      +10 points
+                    </Badge>
+                  ) : undefined
+                }
               />
               <div className="mt-5">
                 <EvidenceUploader caseId={caseId} canUpload={!isClosed} onUploaded={load} />
@@ -291,11 +381,42 @@ export default function CaseDetailPage() {
 
 /* ------------------------------------------------------------------ */
 
-function Fact({ label, children }: { label: string; children: React.ReactNode }) {
+/** Five-milestone progress strip. Orientation at a glance. */
+function ProgressRail({ stage, closedWithoutFix }: { stage: number; closedWithoutFix: boolean }) {
   return (
-    <div className="rounded-xl bg-surface-soft p-3.5">
-      <dt className="text-xs font-medium uppercase tracking-wide text-ink-faint">{label}</dt>
-      <dd className="mt-1 text-sm font-medium text-ink">{children}</dd>
+    <ol className="flex items-center gap-1.5 overflow-x-auto no-scrollbar" aria-label="Case progress">
+      {PROGRESS_STAGES.map((label, index) => {
+        const done = index < stage;
+        const current = index === stage;
+        const isFinal = index === PROGRESS_STAGES.length - 1;
+        const tone = isFinal && closedWithoutFix ? 'bg-ink-faint' : done || current ? 'bg-accent' : 'bg-line';
+
+        return (
+          <li key={label} className="flex min-w-0 flex-1 flex-col gap-1.5">
+            <span aria-hidden="true" className={`h-1.5 rounded-full transition-colors duration-500 ${tone}`} />
+            <span
+              aria-current={current ? 'step' : undefined}
+              className={`truncate text-[11px] font-medium ${
+                done || current ? 'text-ink-soft' : 'text-ink-faint'
+              }`}
+            >
+              {isFinal && closedWithoutFix ? 'Closed' : label}
+            </span>
+          </li>
+        );
+      })}
+    </ol>
+  );
+}
+
+function Fact({ label, icon, children }: { label: string; icon?: React.ReactNode; children: React.ReactNode }) {
+  return (
+    <div className="rounded-xl border border-line bg-surface-soft p-3.5">
+      <dt className="flex items-center gap-1.5 text-xs font-medium uppercase tracking-wide text-ink-faint">
+        <span aria-hidden="true">{icon}</span>
+        {label}
+      </dt>
+      <dd className="mt-1.5 text-sm font-medium leading-snug text-ink">{children}</dd>
     </div>
   );
 }
@@ -327,7 +448,11 @@ function ActionBar({
 
   if (isClosed) {
     return (
-      <Alert tone="good" title={record.status === 'RESOLVED' ? 'This case is resolved' : 'This case is closed'}>
+      <Alert
+        tone={record.status === 'RESOLVED' ? 'good' : 'neutral'}
+        title={record.status === 'RESOLVED' ? 'This case is resolved' : 'This case is closed'}
+        icon={<IconCheck className="h-[18px] w-[18px]" />}
+      >
         <p>{record.resolutionNote || 'The full history below stays available if the problem comes back.'}</p>
         <p className="mt-1 text-xs text-ink-muted">Closed on {formatDateTime(record.resolvedAt)}.</p>
       </Alert>
@@ -336,11 +461,18 @@ function ActionBar({
 
   return (
     <Card className="p-5 sm:p-6">
-      <SectionHeading title="Update this case" description="Keep the record accurate — your follow-up dates depend on it." />
+      <SectionHeading
+        title="Update this case"
+        description="Keep the record accurate — your follow-up dates depend on it."
+      />
 
       <div className="mt-4 flex flex-wrap gap-2">
         {canMarkSubmitted ? (
-          <Button size="sm" onClick={() => setOpen(open === 'submitted' ? undefined : 'submitted')}>
+          <Button
+            size="sm"
+            icon={<IconSend className="h-4 w-4" />}
+            onClick={() => setOpen(open === 'submitted' ? undefined : 'submitted')}
+          >
             I submitted it officially
           </Button>
         ) : null}
@@ -349,13 +481,20 @@ function ActionBar({
             size="sm"
             variant="secondary"
             loading={busy === 'followup'}
+            icon={<IconClock className="h-4 w-4" />}
             onClick={() => setOpen(open === 'followup' ? undefined : 'followup')}
           >
             Log a follow-up
           </Button>
         ) : null}
         {escalation.availableLevel > 0 ? (
-          <Button size="sm" variant="secondary" loading={busy === 'escalate'} onClick={onEscalate}>
+          <Button
+            size="sm"
+            variant="secondary"
+            loading={busy === 'escalate'}
+            icon={<IconEscalate className="h-4 w-4" />}
+            onClick={onEscalate}
+          >
             Escalate to step {escalation.availableLevel}
           </Button>
         ) : null}
@@ -364,22 +503,22 @@ function ActionBar({
         </Button>
       </div>
 
-      {/* Explain why escalation is not offered yet, rather than hiding it silently. */}
+      {/* Explain why escalation is not offered yet, rather than hiding it. */}
       {escalation.availableLevel === 0 && record.submittedAt ? (
-        <p className="mt-3 text-xs leading-relaxed text-ink-muted">
+        <p className="mt-3.5 text-xs leading-relaxed text-ink-muted">
           {escalation.reason}
           {nextEscalationStep ? ` Next step would be: ${nextEscalationStep.title}.` : ''}
         </p>
       ) : null}
       {!record.submittedAt ? (
-        <p className="mt-3 text-xs leading-relaxed text-ink-muted">
+        <p className="mt-3.5 text-xs leading-relaxed text-ink-muted">
           Follow-ups and escalation start once you record the case as submitted, because every deadline is measured
           from the date you filed it.
         </p>
       ) : null}
 
       {open === 'submitted' ? (
-        <div className="mt-5 space-y-4 rounded-xl border border-line bg-surface-soft p-4">
+        <div className="rise mt-5 space-y-4 rounded-xl border border-line bg-surface-soft p-4">
           <p className="text-sm text-ink-soft">
             Record it here after you have submitted through the official channel. CivicSOS never files on your behalf.
           </p>
@@ -396,7 +535,7 @@ function ActionBar({
       ) : null}
 
       {open === 'followup' ? (
-        <div className="mt-5 space-y-4 rounded-xl border border-line bg-surface-soft p-4">
+        <div className="rise mt-5 space-y-4 rounded-xl border border-line bg-surface-soft p-4">
           <Field label="What happened?" htmlFor="followup-note" hint="E.g. called the helpline, told it is in process.">
             <Textarea
               id="followup-note"
@@ -413,7 +552,7 @@ function ActionBar({
       ) : null}
 
       {open === 'resolve' ? (
-        <div className="mt-5 space-y-4 rounded-xl border border-line bg-surface-soft p-4">
+        <div className="rise mt-5 space-y-4 rounded-xl border border-line bg-surface-soft p-4">
           <Field label="Anything to note?" htmlFor="resolve-note" hint="Optional. Useful if the problem returns.">
             <Textarea
               id="resolve-note"
@@ -423,10 +562,16 @@ function ActionBar({
               maxLength={500}
             />
           </Field>
-          <div className="flex flex-wrap gap-2">
-            <Button size="sm" loading={busy === 'resolve'} onClick={() => onResolve(note.trim(), 'FIXED')}>
+          <div className="flex flex-wrap items-center gap-2">
+            <Button
+              size="sm"
+              loading={busy === 'resolve'}
+              icon={<IconCheck className="h-4 w-4" />}
+              onClick={() => onResolve(note.trim(), 'FIXED')}
+            >
               The problem is fixed
             </Button>
+            <Badge tone="gold">+100 points</Badge>
             <Button
               size="sm"
               variant="danger"
@@ -495,7 +640,7 @@ function ComplaintPanel({ detail, onSaved }: { detail: CaseDetailResponse; onSav
         <Field label="Complaint" htmlFor="case-body">
           <Textarea
             id="case-body"
-            className="letter min-h-[26rem] font-mono text-[13px] leading-relaxed"
+            className="letter min-h-[24rem] font-mono text-[13px] leading-relaxed"
             value={body}
             onChange={(event) => setBody(event.target.value)}
             maxLength={6000}
@@ -507,7 +652,7 @@ function ComplaintPanel({ detail, onSaved }: { detail: CaseDetailResponse; onSav
           <CopyButton text={`${subject}\n\n${body}`} />
           {!isClosed ? (
             <Button variant="secondary" loading={saving} disabled={!dirty} onClick={save}>
-              {saved ? '✓ Saved' : 'Save changes'}
+              {saved ? 'Saved' : 'Save changes'}
             </Button>
           ) : null}
           <span role="status" aria-live="polite" className="text-xs text-ink-muted">
@@ -524,14 +669,22 @@ function CaseDetailSkeleton() {
     <div className="space-y-6" aria-busy="true">
       <span className="sr-only">Loading this case</span>
       <Skeleton className="h-4 w-24" />
-      <Skeleton className="h-8 w-3/4" />
-      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="space-y-4">
+        <div className="flex gap-2">
+          <Skeleton className="h-7 w-28 rounded-full" />
+          <Skeleton className="h-7 w-32 rounded-full" />
+        </div>
+        <Skeleton className="h-9 w-3/4" />
+        <Skeleton className="h-5 w-1/2" />
+        <Skeleton className="h-8 w-full" />
+      </div>
+      <div className="grid gap-2.5 sm:grid-cols-2 lg:grid-cols-4">
         {Array.from({ length: 4 }).map((_, index) => (
-          <Skeleton key={index} className="h-20 w-full" />
+          <Skeleton key={index} className="h-20 w-full rounded-xl" />
         ))}
       </div>
-      <Skeleton className="h-36 w-full" />
-      <Skeleton className="h-64 w-full" />
+      <Skeleton className="h-36 w-full rounded-2xl" />
+      <Skeleton className="h-72 w-full rounded-2xl" />
     </div>
   );
 }

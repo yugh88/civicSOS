@@ -1,33 +1,54 @@
 'use client';
 
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
 import { useCallback, useEffect, useState } from 'react';
 import { ApiError, apiFetch } from '@/lib/api';
 import { useApi, useAuth } from '@/lib/auth';
-import { APP_TAGLINE } from '@/lib/config';
-import { placeholderLabel } from '@/lib/format';
+import { URGENCY_LABEL, URGENCY_TONE, formatDate, placeholderLabel } from '@/lib/format';
 import type {
   AnalyzeResponse,
   CaseRecord,
   CategoryId,
+  CreateCaseResponse,
   KnowledgeResponse,
   LocationInput,
 } from '@/lib/types';
 import { PlanView } from './PlanView';
-import { Alert, Badge, Button, Card, Field, Input, SectionHeading, Skeleton, Textarea } from './ui';
+import {
+  Alert,
+  Badge,
+  Button,
+  ButtonLink,
+  Card,
+  Field,
+  Input,
+  PointsPill,
+  SectionHeading,
+  Skeleton,
+  Textarea,
+} from './ui';
+import {
+  CategoryIcon,
+  IconArrowLeft,
+  IconArrowRight,
+  IconCamera,
+  IconCheck,
+  IconLocation,
+  IconSend,
+  IconShield,
+  IconSparkle,
+} from './icons';
 
 /**
- * The report flow: describe → understand → review → track.
+ * The report flow: describe → understand → review → tracked.
  *
- * Progressive by design. The first screen asks for one thing — what happened —
- * because a long form is the fastest way to lose someone who is already
- * frustrated. Location, category and the remaining complaint details are
- * collected only once they are actually needed, and only when CivicSOS could
- * not work them out itself.
+ * Progressive by design. The first screen asks for exactly one thing, because a
+ * long form is the fastest way to lose someone who is already frustrated.
+ * Location, category and the rest of the complaint details are collected only
+ * when they are actually needed, and only when CivicSOS could not work them out.
  *
- * The draft is mirrored into `sessionStorage` so an accidental refresh in the
- * middle of the flow does not throw away what the person typed.
+ * The draft is mirrored into `sessionStorage`, so an accidental refresh
+ * mid-flow does not discard what was typed.
  */
 
 type Step = 'describe' | 'plan' | 'created';
@@ -44,13 +65,7 @@ interface Draft {
   sinceWhen: string;
 }
 
-const EMPTY_DRAFT: Draft = {
-  description: '',
-  location: {},
-  name: '',
-  contact: '',
-  sinceWhen: '',
-};
+const EMPTY_DRAFT: Draft = { description: '', location: {}, name: '', contact: '', sinceWhen: '' };
 
 const EXAMPLES = [
   'There has been garbage outside my apartment for 4 days and it smells terrible.',
@@ -62,37 +77,37 @@ function readDraft(): Draft {
   if (typeof window === 'undefined') return EMPTY_DRAFT;
   try {
     const raw = window.sessionStorage.getItem(DRAFT_KEY);
-    if (!raw) return EMPTY_DRAFT;
-    return { ...EMPTY_DRAFT, ...(JSON.parse(raw) as Partial<Draft>) };
+    return raw ? { ...EMPTY_DRAFT, ...(JSON.parse(raw) as Partial<Draft>) } : EMPTY_DRAFT;
   } catch {
     return EMPTY_DRAFT;
   }
 }
 
-export function ReportFlow() {
+export function ReportFlow({ initialCategory }: { initialCategory?: CategoryId }) {
   const { session, loading: sessionLoading } = useAuth();
   const api = useApi();
-  const router = useRouter();
 
   const [step, setStep] = useState<Step>('describe');
   const [draft, setDraft] = useState<Draft>(EMPTY_DRAFT);
   const [knowledge, setKnowledge] = useState<KnowledgeResponse | undefined>();
   const [analysis, setAnalysis] = useState<AnalyzeResponse | undefined>();
-  const [complaintBody, setComplaintBody] = useState('');
   const [complaintSubject, setComplaintSubject] = useState('');
-  const [createdCase, setCreatedCase] = useState<CaseRecord | undefined>();
+  const [complaintBody, setComplaintBody] = useState('');
+  const [created, setCreated] = useState<CreateCaseResponse | undefined>();
 
   const [analyzing, setAnalyzing] = useState(false);
   const [creating, setCreating] = useState(false);
-  const [error, setError] = useState<ApiError | Error | undefined>();
+  const [error, setError] = useState<Error | undefined>();
   const [locating, setLocating] = useState(false);
   const [touched, setTouched] = useState(false);
 
-  // Restore the draft after mount, so server and client render the same markup.
-  useEffect(() => setDraft(readDraft()), []);
+  // Restore after mount so server and client render identical markup.
+  useEffect(() => {
+    const restored = readDraft();
+    setDraft(initialCategory ? { ...restored, categoryId: initialCategory } : restored);
+  }, [initialCategory]);
 
   useEffect(() => {
-    if (typeof window === 'undefined') return;
     try {
       window.sessionStorage.setItem(DRAFT_KEY, JSON.stringify(draft));
     } catch {
@@ -100,7 +115,6 @@ export function ReportFlow() {
     }
   }, [draft]);
 
-  // The category catalogue is public, so it loads without a session.
   useEffect(() => {
     let cancelled = false;
     apiFetch<KnowledgeResponse>('/knowledge/categories')
@@ -117,7 +131,7 @@ export function ReportFlow() {
     setDraft((current) => ({ ...current, [key]: value }));
   }, []);
 
-  const descriptionTooShort = draft.description.trim().length < MIN_DESCRIPTION;
+  const tooShort = draft.description.trim().length < MIN_DESCRIPTION;
 
   const useMyLocation = useCallback(() => {
     if (!('geolocation' in navigator)) {
@@ -151,18 +165,20 @@ export function ReportFlow() {
   const analyze = useCallback(
     async (categoryOverride?: CategoryId) => {
       setTouched(true);
-      if (descriptionTooShort) return;
+      if (tooShort) return;
 
       setAnalyzing(true);
       setError(undefined);
       try {
-        const payload = {
-          description: draft.description.trim(),
-          location: hasLocation(draft.location) ? draft.location : undefined,
-          categoryId: categoryOverride ?? draft.categoryId,
-          hasPhoto: false,
-        };
-        const result = await api<AnalyzeResponse>('/cases/analyze', { method: 'POST', body: payload });
+        const result = await api<AnalyzeResponse>('/cases/analyze', {
+          method: 'POST',
+          body: {
+            description: draft.description.trim(),
+            location: hasLocation(draft.location) ? draft.location : undefined,
+            categoryId: categoryOverride ?? draft.categoryId,
+            hasPhoto: false,
+          },
+        });
         setAnalysis(result);
         setComplaintSubject(result.analysis.complaint.subject);
         setComplaintBody(result.analysis.complaint.body);
@@ -175,7 +191,7 @@ export function ReportFlow() {
         setAnalyzing(false);
       }
     },
-    [api, descriptionTooShort, draft, update],
+    [api, draft, tooShort, update],
   );
 
   const createCase = useCallback(async () => {
@@ -183,7 +199,7 @@ export function ReportFlow() {
     setCreating(true);
     setError(undefined);
     try {
-      const result = await api<{ case: CaseRecord; created: boolean }>('/cases', {
+      const result = await api<CreateCaseResponse>('/cases', {
         method: 'POST',
         body: {
           description: draft.description.trim(),
@@ -200,7 +216,7 @@ export function ReportFlow() {
           idempotencyKey: draftKey(draft.description),
         },
       });
-      setCreatedCase(result.case);
+      setCreated(result);
       setStep('created');
       window.sessionStorage.removeItem(DRAFT_KEY);
       window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -211,11 +227,16 @@ export function ReportFlow() {
     }
   }, [analysis, api, complaintBody, complaintSubject, draft]);
 
-  /* ---------------------------------------------------------------- */
+  const restart = useCallback(() => {
+    setDraft(EMPTY_DRAFT);
+    setAnalysis(undefined);
+    setCreated(undefined);
+    setTouched(false);
+    setStep('describe');
+    window.scrollTo({ top: 0 });
+  }, []);
 
-  if (step === 'created' && createdCase) {
-    return <CreatedStep record={createdCase} onReportAnother={() => resetFlow(setStep, setDraft, setAnalysis)} />;
-  }
+  if (step === 'created' && created) return <CreatedStep result={created} onReportAnother={restart} />;
 
   if (step === 'plan' && analysis) {
     return (
@@ -239,53 +260,97 @@ export function ReportFlow() {
   }
 
   return (
-    <div className="space-y-8">
-      <div className="space-y-3">
-        <h1 className="text-3xl font-semibold tracking-tight text-ink sm:text-4xl">What problem are you facing?</h1>
-        <p className="max-w-2xl text-[15px] leading-relaxed text-ink-muted">{APP_TAGLINE}</p>
+    <div className="mx-auto max-w-2xl space-y-7">
+      <StepRail current={1} />
+
+      <div className="space-y-2.5 text-center">
+        <h1 className="text-[28px] font-semibold leading-tight tracking-tight text-ink sm:text-[32px]">
+          Let&apos;s solve this together
+        </h1>
+        <p className="text-[15px] leading-relaxed text-ink-muted">
+          Tell us what happened. We&apos;ll figure out what you should do next.
+        </p>
       </div>
 
-      <Card className="p-5 sm:p-6">
-        <div className="space-y-5">
+      <Card className="p-5 sm:p-7">
+        <div className="space-y-6">
           <Field
-            label="Tell us what happened, in your own words"
-            hint="No forms yet. One or two sentences is enough to get started."
+            label="What happened?"
+            hint="One or two sentences is enough. No forms yet."
             htmlFor="description"
             required
-            error={touched && descriptionTooShort ? 'Please add a little more — at least a sentence.' : undefined}
+            error={touched && tooShort ? 'Please add a little more — at least a sentence.' : undefined}
+            labelAside={
+              <span className="text-xs tabular-nums text-ink-faint">{draft.description.length}/4000</span>
+            }
           >
             <Textarea
               id="description"
               rows={5}
               value={draft.description}
-              invalid={touched && descriptionTooShort}
+              invalid={touched && tooShort}
               onChange={(event) => update('description', event.target.value)}
-              placeholder="There has been garbage outside my apartment for 4 days…"
+              placeholder="Describe the problem in your own words..."
               maxLength={4000}
               autoComplete="off"
             />
           </Field>
 
           <div>
-            <p className="mb-2 text-xs font-medium uppercase tracking-wide text-ink-faint">Or start from an example</p>
+            <p className="mb-2.5 text-xs font-medium uppercase tracking-wide text-ink-faint">Or start from an example</p>
             <div className="flex flex-wrap gap-2">
               {EXAMPLES.map((example) => (
                 <button
                   key={example}
                   type="button"
                   onClick={() => update('description', example)}
-                  className="rounded-full border border-line-strong px-3 py-1.5 text-left text-xs text-ink-soft transition-colors hover:border-accent-line hover:bg-accent-soft hover:text-accent"
+                  className="rounded-full border border-line-strong px-3 py-1.5 text-left text-xs text-ink-soft transition-colors duration-150 hover:border-accent-line hover:bg-accent-soft hover:text-accent-ink"
                 >
-                  {example.slice(0, 44)}…
+                  {example.slice(0, 42)}…
                 </button>
               ))}
             </div>
           </div>
 
-          <details className="group rounded-xl border border-line bg-surface-soft p-4">
-            <summary className="cursor-pointer text-sm font-medium text-ink-soft marker:text-ink-faint">
-              Add the location now (optional — we will ask if we need it)
+          {/* Category is optional — the classifier usually gets it right. */}
+          {knowledge ? (
+            <div>
+              <p className="mb-2.5 text-xs font-medium uppercase tracking-wide text-ink-faint">
+                Category <span className="font-normal normal-case text-ink-faint">(optional — we can work it out)</span>
+              </p>
+              <div className="flex flex-wrap gap-2">
+                {knowledge.categories.map((category) => {
+                  const selected = draft.categoryId === category.categoryId;
+                  return (
+                    <button
+                      key={category.categoryId}
+                      type="button"
+                      aria-pressed={selected}
+                      onClick={() =>
+                        update('categoryId', selected ? undefined : (category.categoryId as CategoryId))
+                      }
+                      className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-medium transition-colors duration-150 ${
+                        selected
+                          ? 'border-accent bg-accent text-white'
+                          : 'border-line-strong bg-surface text-ink-soft hover:border-accent-line hover:bg-accent-soft hover:text-accent-ink'
+                      }`}
+                    >
+                      <CategoryIcon categoryId={category.categoryId} className="h-3.5 w-3.5" />
+                      {category.label}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          ) : null}
+
+          <details className="group rounded-2xl border border-line bg-surface-soft p-4">
+            <summary className="flex cursor-pointer list-none items-center gap-2 text-sm font-medium text-ink-soft">
+              <IconLocation className="h-4 w-4 text-ink-faint" />
+              Add location and photos
+              <span className="ml-auto text-xs font-normal text-ink-faint">Optional</span>
             </summary>
+
             <div className="mt-4 grid gap-4 sm:grid-cols-2">
               <Field label="Area or street" htmlFor="locality" hint="A landmark helps a lot.">
                 <Input
@@ -307,16 +372,27 @@ export function ReportFlow() {
                   maxLength={80}
                 />
               </Field>
-              <div className="sm:col-span-2">
-                <Button type="button" variant="secondary" size="sm" loading={locating} onClick={useMyLocation}>
+              <div className="sm:col-span-2 space-y-3">
+                <Button
+                  type="button"
+                  variant="secondary"
+                  size="sm"
+                  loading={locating}
+                  onClick={useMyLocation}
+                  icon={<IconLocation className="h-4 w-4" />}
+                >
                   Use my current location
                 </Button>
                 {draft.location.lat !== undefined ? (
-                  <p className="mt-2 text-xs text-ink-muted">
+                  <p className="text-xs text-ink-muted">
                     Approximate location captured. We round it to about a kilometre and never store your exact
                     position.
                   </p>
                 ) : null}
+                <p className="flex items-start gap-2 text-xs leading-relaxed text-ink-muted">
+                  <IconCamera className="mt-px h-4 w-4 shrink-0 text-ink-faint" />
+                  Photos are attached after the case is created, so you can take them at the spot rather than now.
+                </p>
               </div>
             </div>
           </details>
@@ -336,29 +412,33 @@ export function ReportFlow() {
                 CivicSOS keeps your cases private to you, so it needs to know who you are before it can track one.
               </p>
               <div className="flex flex-wrap gap-2">
-                <Link href="/signin">
-                  <Button size="sm">Sign in or create an account</Button>
-                </Link>
-                <Link href="/signin?demo=1">
-                  <Button size="sm" variant="secondary">
-                    Try the demo instead
-                  </Button>
-                </Link>
+                <ButtonLink href="/signin?next=/report" size="sm">
+                  Sign in or create an account
+                </ButtonLink>
+                <ButtonLink href="/signin?demo=1" size="sm" variant="secondary">
+                  Try the demo instead
+                </ButtonLink>
               </div>
             </Alert>
           ) : (
-            <Button size="lg" full loading={analyzing} onClick={() => analyze()} disabled={sessionLoading}>
+            <Button
+              size="xl"
+              full
+              loading={analyzing}
+              onClick={() => analyze()}
+              disabled={sessionLoading}
+              trailingIcon={analyzing ? undefined : <IconArrowRight className="h-[18px] w-[18px]" />}
+            >
               {analyzing ? 'Working out what to do…' : 'Help me solve this'}
             </Button>
           )}
 
-          <p className="text-center text-xs text-ink-muted">
+          <p className="flex items-center justify-center gap-2 text-center text-xs text-ink-muted">
+            <IconShield className="h-4 w-4 shrink-0 text-teal" />
             We strip phone numbers, emails and ID numbers before any AI sees your text.
           </p>
         </div>
       </Card>
-
-      <HowItWorks />
     </div>
   );
 }
@@ -366,6 +446,38 @@ export function ReportFlow() {
 /* ------------------------------------------------------------------ */
 /* Steps                                                              */
 /* ------------------------------------------------------------------ */
+
+/** Three-step progress rail. Orientation, not decoration. */
+function StepRail({ current }: { current: 1 | 2 | 3 }) {
+  const steps = ['Describe', 'Review plan', 'Track it'];
+  return (
+    <ol className="flex items-center justify-center gap-2 text-xs font-medium" aria-label="Progress">
+      {steps.map((label, index) => {
+        const position = index + 1;
+        const done = position < current;
+        const active = position === current;
+        return (
+          <li key={label} className="flex items-center gap-2">
+            <span
+              aria-current={active ? 'step' : undefined}
+              className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 transition-colors ${
+                active
+                  ? 'bg-accent text-white'
+                  : done
+                    ? 'bg-good-soft text-good ring-1 ring-inset ring-good-line'
+                    : 'bg-surface-sunken text-ink-faint'
+              }`}
+            >
+              {done ? <IconCheck className="h-3.5 w-3.5" /> : <span className="tabular-nums">{position}</span>}
+              <span className="hidden sm:inline">{label}</span>
+            </span>
+            {position < steps.length ? <span aria-hidden="true" className="h-px w-4 bg-line-strong sm:w-8" /> : null}
+          </li>
+        );
+      })}
+    </ol>
+  );
+}
 
 function PlanStep({
   analysis,
@@ -400,16 +512,21 @@ function PlanStep({
 }) {
   const { analysis: result, meta } = analysis;
   const remaining = findPlaceholders(`${complaintSubject}\n${complaintBody}`);
+  const location = [draft.location.locality, draft.location.city].filter(Boolean).join(', ');
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-wrap items-center justify-between gap-3">
+      <StepRail current={2} />
+
+      <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <p className="text-xs font-medium uppercase tracking-wide text-ink-faint">Step 2 of 3</p>
-          <h1 className="mt-1 text-2xl font-semibold tracking-tight text-ink sm:text-3xl">Here is what to do</h1>
+          <h1 className="text-[26px] font-semibold tracking-tight text-ink sm:text-[30px]">Here&apos;s what we found</h1>
+          <p className="mt-1.5 text-[15px] text-ink-muted">
+            Check this over, then we&apos;ll get you set up to submit it.
+          </p>
         </div>
-        <Button variant="ghost" size="sm" onClick={onBack}>
-          ← Edit what I wrote
+        <Button variant="ghost" size="sm" onClick={onBack} icon={<IconArrowLeft className="h-4 w-4" />}>
+          Edit what I wrote
         </Button>
       </div>
 
@@ -420,6 +537,27 @@ function PlanStep({
           wording is just a little more generic than usual.
         </Alert>
       ) : null}
+
+      {/* Summary strip: the four things someone checks first. */}
+      <Card className="overflow-hidden">
+        <div className="grid divide-y divide-line sm:grid-cols-4 sm:divide-x sm:divide-y-0">
+          <SummaryCell label="Problem" value={result.summary} wide />
+          <SummaryCell
+            label="Category"
+            value={
+              <span className="inline-flex items-center gap-1.5">
+                <CategoryIcon categoryId={result.categoryId} className="h-4 w-4 text-accent" />
+                {result.categoryLabel}
+              </span>
+            }
+          />
+          <SummaryCell label="Location" value={location || 'Not specified'} />
+          <SummaryCell
+            label="Priority"
+            value={<Badge tone={URGENCY_TONE[result.urgency]}>{URGENCY_LABEL[result.urgency]}</Badge>}
+          />
+        </div>
+      </Card>
 
       {result.needsCategoryConfirmation ? (
         <Alert tone="accent" title="Is this the right category?">
@@ -434,15 +572,13 @@ function PlanStep({
                 type="button"
                 disabled={reanalyzing}
                 onClick={() => onChangeCategory(category.categoryId as CategoryId)}
-                className={`rounded-full border px-3 py-1.5 text-xs font-medium transition-colors disabled:opacity-60 ${
+                className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-medium transition-colors disabled:opacity-60 ${
                   category.categoryId === result.categoryId
                     ? 'border-accent bg-accent text-white'
-                    : 'border-line-strong bg-surface text-ink-soft hover:border-accent-line hover:text-accent'
+                    : 'border-line-strong bg-surface text-ink-soft hover:border-accent-line hover:text-accent-ink'
                 }`}
               >
-                <span aria-hidden="true" className="mr-1">
-                  {category.emoji}
-                </span>
+                <CategoryIcon categoryId={category.categoryId} className="h-3.5 w-3.5" />
                 {category.label}
               </button>
             ))}
@@ -450,22 +586,23 @@ function PlanStep({
         </Alert>
       ) : null}
 
-      <PlanView plan={result.plan} />
+      <div>
+        <h2 className="mb-4 text-lg font-semibold tracking-tight text-ink">Here&apos;s what to do next</h2>
+        <PlanView plan={result.plan} />
+      </div>
 
       {result.missingInformation.length > 0 ? (
         <Card className="p-5 sm:p-6">
-          <SectionHeading
-            title="Add these details"
-            description="These are the things an official would ask you for."
-          />
-          <ul className="mt-3 space-y-1.5">
+          <SectionHeading title="Add these details" description="These are the things an official would ask you for." />
+          <ul className="mt-3.5 space-y-2">
             {result.missingInformation.map((item, index) => (
-              <li key={index} className="flex gap-2 text-sm text-ink-muted">
-                <span aria-hidden="true">•</span>
+              <li key={index} className="flex gap-2.5 text-sm text-ink-muted">
+                <span aria-hidden="true" className="mt-2 h-1.5 w-1.5 shrink-0 rounded-full bg-line-strong" />
                 <span>{item}</span>
               </li>
             ))}
           </ul>
+
           <div className="mt-5 grid gap-4 sm:grid-cols-2">
             <Field label="Your name" htmlFor="reporter-name" hint="As you want it on the complaint.">
               <Input
@@ -486,10 +623,12 @@ function PlanStep({
               />
             </Field>
           </div>
+
           <Button
             variant="secondary"
             size="sm"
             className="mt-4"
+            disabled={!draft.name && !draft.contact}
             onClick={() =>
               onBodyChange(
                 complaintBody
@@ -497,7 +636,6 @@ function PlanStep({
                   .replaceAll('[[YOUR_CONTACT]]', draft.contact || '[[YOUR_CONTACT]]'),
               )
             }
-            disabled={!draft.name && !draft.contact}
           >
             Put these into the complaint
           </Button>
@@ -510,7 +648,9 @@ function PlanStep({
           description="Read it, change anything you like, then copy it into the official channel."
           aside={
             result.complaint.provenance === 'AI_ASSISTED' ? (
-              <Badge tone="accent">AI-assisted draft</Badge>
+              <Badge tone="accent" icon={<IconSparkle className="h-3.5 w-3.5" />}>
+                AI-assisted draft
+              </Badge>
             ) : (
               <Badge>Template draft</Badge>
             )
@@ -539,7 +679,7 @@ function PlanStep({
           <Field label="Complaint" htmlFor="complaint-body">
             <Textarea
               id="complaint-body"
-              className="letter min-h-[26rem] font-mono text-[13px] leading-relaxed"
+              className="letter min-h-[24rem] font-mono text-[13px] leading-relaxed"
               value={complaintBody}
               onChange={(event) => onBodyChange(event.target.value)}
               maxLength={6000}
@@ -551,16 +691,23 @@ function PlanStep({
 
       {error ? (
         <Alert tone="bad" title="We could not create the case">
-          <p>{error.message}</p>
+          {error.message}
         </Alert>
       ) : null}
 
-      <div className="sticky bottom-0 -mx-4 border-t border-line bg-surface/95 px-4 py-4 backdrop-blur sm:-mx-6 sm:px-6">
-        <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-          <p className="text-xs text-ink-muted">
+      {/* Sticky commit bar: the next action is never scrolled off screen. */}
+      <div className="sticky bottom-0 -mx-4 border-t border-line bg-surface/95 px-4 py-4 backdrop-blur-md sm:-mx-6 sm:px-6">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <p className="text-xs leading-relaxed text-ink-muted">
             Creating a case lets CivicSOS track it, remind you when to follow up, and show you how to escalate.
           </p>
-          <Button size="lg" loading={creating} onClick={onCreate} className="shrink-0">
+          <Button
+            size="lg"
+            loading={creating}
+            onClick={onCreate}
+            className="shrink-0"
+            trailingIcon={creating ? undefined : <IconArrowRight className="h-[18px] w-[18px]" />}
+          >
             Create my case
           </Button>
         </div>
@@ -569,55 +716,83 @@ function PlanStep({
   );
 }
 
-function CreatedStep({ record, onReportAnother }: { record: CaseRecord; onReportAnother: () => void }) {
+function SummaryCell({ label, value, wide = false }: { label: string; value: React.ReactNode; wide?: boolean }) {
   return (
-    <div className="space-y-6">
-      <Card className="p-6 text-center sm:p-10">
+    <div className={`p-4 sm:p-5 ${wide ? 'sm:col-span-1' : ''}`}>
+      <p className="text-xs font-medium uppercase tracking-wide text-ink-faint">{label}</p>
+      <div className="mt-1.5 text-sm font-medium leading-relaxed text-ink">{value}</div>
+    </div>
+  );
+}
+
+function CreatedStep({ result, onReportAnother }: { result: CreateCaseResponse; onReportAnother: () => void }) {
+  const record: CaseRecord = result.case;
+  const levelUp = result.awards.find((award) => award.levelUp)?.levelUp;
+
+  return (
+    <div className="mx-auto max-w-2xl space-y-6">
+      <StepRail current={3} />
+
+      <Card className="rise p-6 text-center sm:p-10">
         <div
           aria-hidden="true"
-          className="mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-good-soft text-2xl text-good ring-1 ring-inset ring-good-line"
+          className="mx-auto flex h-16 w-16 items-center justify-center rounded-2xl bg-good-soft text-good ring-1 ring-inset ring-good-line"
         >
-          ✓
+          <IconCheck className="h-8 w-8" />
         </div>
+
         <h1 className="mt-5 text-2xl font-semibold tracking-tight text-ink">Your case is being tracked</h1>
-        <p className="mx-auto mt-3 max-w-lg text-[15px] leading-relaxed text-ink-muted">
+
+        {/* Points appear as a small, factual line — not a celebration. */}
+        {result.pointsAwarded > 0 ? (
+          <div className="mt-4 flex justify-center">
+            <PointsPill points={result.pointsAwarded} size="md" />
+          </div>
+        ) : null}
+        {levelUp ? <p className="mt-2 text-sm font-medium text-gold">You reached {levelUp}.</p> : null}
+
+        <p className="mx-auto mt-4 max-w-lg text-[15px] leading-relaxed text-ink-muted">
           CivicSOS has not sent anything to any authority — that part is yours to do. What we have done is record the
           case, work out when you should follow up, and prepare the escalation path if nothing happens.
         </p>
 
-        <dl className="mx-auto mt-6 grid max-w-md gap-3 text-left">
+        <dl className="mx-auto mt-6 grid max-w-md gap-3 text-left sm:grid-cols-2">
           <div className="rounded-xl bg-surface-soft p-3.5">
             <dt className="text-xs font-medium uppercase tracking-wide text-ink-faint">Case reference</dt>
-            <dd className="mt-1 font-mono text-sm text-ink">{record.caseId}</dd>
+            <dd className="mt-1 truncate font-mono text-sm text-ink">{record.caseId}</dd>
           </div>
-          {record.followUpAt ? (
-            <div className="rounded-xl bg-surface-soft p-3.5">
-              <dt className="text-xs font-medium uppercase tracking-wide text-ink-faint">Follow up around</dt>
-              <dd className="mt-1 text-sm font-medium text-ink">
-                {new Date(record.followUpAt).toLocaleDateString(undefined, {
-                  day: 'numeric',
-                  month: 'long',
-                  year: 'numeric',
-                })}
-              </dd>
-            </div>
-          ) : null}
+          <div className="rounded-xl bg-surface-soft p-3.5">
+            <dt className="text-xs font-medium uppercase tracking-wide text-ink-faint">Follow up around</dt>
+            <dd className="mt-1 text-sm font-medium text-ink">
+              {record.followUpAt ? formatDate(record.followUpAt) : '—'}
+            </dd>
+          </div>
         </dl>
 
         <div className="mt-7 flex flex-col justify-center gap-2 sm:flex-row">
-          <Link href={`/cases/${record.caseId}`}>
-            <Button size="lg">Open my case</Button>
-          </Link>
+          <ButtonLink
+            href={`/cases/${record.caseId}`}
+            size="lg"
+            trailingIcon={<IconArrowRight className="h-[18px] w-[18px]" />}
+          >
+            Open my case
+          </ButtonLink>
           <Button size="lg" variant="secondary" onClick={onReportAnother}>
             Report something else
           </Button>
         </div>
       </Card>
 
-      <Alert tone="accent" title="Next step: submit it officially">
+      <Alert tone="accent" title="Next step: submit it officially" icon={<IconSend className="h-[18px] w-[18px]" />}>
         Open your case and use the official channel listed there. When you get a complaint number back, record it on
         the case — every follow-up and escalation depends on it.
       </Alert>
+
+      <p className="text-center text-sm text-ink-muted">
+        <Link href="/cases" className="font-medium text-accent underline underline-offset-4 hover:text-accent-hover">
+          See all my cases
+        </Link>
+      </p>
     </div>
   );
 }
@@ -625,34 +800,6 @@ function CreatedStep({ record, onReportAnother }: { record: CaseRecord; onReport
 /* ------------------------------------------------------------------ */
 /* Bits and pieces                                                    */
 /* ------------------------------------------------------------------ */
-
-function HowItWorks() {
-  const steps = [
-    { title: 'You describe it', detail: 'Plain words. No forms, no jargon, no department names to look up.' },
-    { title: 'We work out the route', detail: 'Which body handles it, what evidence they need, what to expect.' },
-    { title: 'You submit and we track', detail: 'You file it officially; we remind you when to chase it.' },
-  ];
-
-  return (
-    <section aria-labelledby="how-it-works" className="space-y-4">
-      <SectionHeading id="how-it-works" title="How CivicSOS works" />
-      <ol className="grid gap-3 sm:grid-cols-3">
-        {steps.map((step, index) => (
-          <Card key={step.title} as="li" className="p-5">
-            <span
-              aria-hidden="true"
-              className="flex h-7 w-7 items-center justify-center rounded-full bg-accent-soft text-xs font-bold text-accent"
-            >
-              {index + 1}
-            </span>
-            <h3 className="mt-3 text-sm font-semibold text-ink">{step.title}</h3>
-            <p className="mt-1.5 text-sm leading-relaxed text-ink-muted">{step.detail}</p>
-          </Card>
-        ))}
-      </ol>
-    </section>
-  );
-}
 
 export function CopyButton({ text, label = 'Copy the complaint' }: { text: string; label?: string }) {
   const [state, setState] = useState<'idle' | 'copied' | 'failed'>('idle');
@@ -671,8 +818,13 @@ export function CopyButton({ text, label = 'Copy the complaint' }: { text: strin
 
   return (
     <div className="flex flex-wrap items-center gap-3">
-      <Button type="button" variant="secondary" onClick={copy}>
-        {state === 'copied' ? '✓ Copied' : label}
+      <Button
+        type="button"
+        variant={state === 'copied' ? 'secondary' : 'secondary'}
+        onClick={copy}
+        icon={state === 'copied' ? <IconCheck className="h-4 w-4 text-good" /> : undefined}
+      >
+        {state === 'copied' ? 'Copied' : label}
       </Button>
       {/* Announced politely so a screen reader confirms the copy happened. */}
       <span role="status" aria-live="polite" className="text-xs text-ink-muted">
@@ -685,14 +837,15 @@ export function CopyButton({ text, label = 'Copy the complaint' }: { text: strin
 
 export function ReportFlowSkeleton() {
   return (
-    <div className="space-y-6" aria-busy="true">
-      <Skeleton className="h-9 w-3/4 max-w-md" />
-      <Skeleton className="h-5 w-full max-w-lg" />
-      <Card className="p-6">
-        <div className="space-y-4">
-          <Skeleton className="h-4 w-48" />
+    <div className="mx-auto max-w-2xl space-y-6" aria-busy="true">
+      <Skeleton className="mx-auto h-8 w-64" />
+      <Skeleton className="mx-auto h-9 w-3/4" />
+      <Card className="p-7">
+        <div className="space-y-5">
+          <Skeleton className="h-4 w-40" />
           <Skeleton className="h-32 w-full" />
-          <Skeleton className="h-12 w-full" />
+          <Skeleton className="h-9 w-full" />
+          <Skeleton className="h-14 w-full" />
         </div>
       </Card>
     </div>
@@ -715,7 +868,8 @@ function findPlaceholders(text: string): string[] {
  * Stable idempotency key derived from the description.
  *
  * Two taps on "Create my case" for the same text produce the same key, so the
- * server returns the existing case rather than creating a duplicate.
+ * server returns the existing case rather than creating a duplicate — and, with
+ * it, refuses to award a second set of Civic Points.
  */
 function draftKey(description: string): string {
   let hash = 0;
@@ -723,15 +877,4 @@ function draftKey(description: string): string {
     hash = (hash * 31 + description.charCodeAt(index)) | 0;
   }
   return `draft-${Math.abs(hash).toString(36)}`;
-}
-
-function resetFlow(
-  setStep: (step: Step) => void,
-  setDraft: (draft: Draft) => void,
-  setAnalysis: (analysis: undefined) => void,
-): void {
-  setDraft(EMPTY_DRAFT);
-  setAnalysis(undefined);
-  setStep('describe');
-  window.scrollTo({ top: 0 });
 }

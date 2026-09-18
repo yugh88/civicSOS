@@ -5,6 +5,8 @@ import type {
   CaseStatus,
   EvidenceItem,
   NotificationRecord,
+  PointsEntry,
+  Redemption,
   UserProfile,
 } from '../domain/types.js';
 import type {
@@ -16,6 +18,7 @@ import type {
   Page,
   RateLimiter,
   UploadTarget,
+  UserCounterDeltas,
 } from '../ports/index.js';
 import { AppError } from '../domain/errors.js';
 
@@ -58,6 +61,9 @@ export class InMemoryCaseRepository implements CaseRepository {
   private audits: AuditEvent[] = [];
   private notifications = new Map<string, NotificationRecord[]>();
   private users = new Map<string, UserProfile>();
+  private points = new Map<string, PointsEntry[]>();
+  private pointsKeys = new Set<string>();
+  private redemptions = new Map<string, Redemption[]>();
 
   /** Seeds demo data without going through the service layer. */
   seedCase(record: CaseRecord, events: CaseEvent[] = []): void {
@@ -183,6 +189,60 @@ export class InMemoryCaseRepository implements CaseRepository {
   async putUser(profile: UserProfile): Promise<UserProfile> {
     this.users.set(profile.userId, profile);
     return profile;
+  }
+
+  async putPointsEntry(entry: PointsEntry): Promise<boolean> {
+    // Mirrors the conditional write the DynamoDB adapter performs, so award
+    // idempotency is exercised by the test suite rather than assumed.
+    const key = `${entry.userId}#${entry.dedupeKey}`;
+    if (this.pointsKeys.has(key)) return false;
+    this.pointsKeys.add(key);
+    const list = this.points.get(entry.userId) ?? [];
+    list.push(entry);
+    this.points.set(entry.userId, list);
+    return true;
+  }
+
+  async listPointsEntries(userId: string, limit = 25): Promise<PointsEntry[]> {
+    return [...(this.points.get(userId) ?? [])]
+      .sort((a, b) => b.entryId.localeCompare(a.entryId))
+      .slice(0, limit);
+  }
+
+  async bumpUserCounters(userId: string, deltas: UserCounterDeltas): Promise<UserProfile> {
+    const now = new Date().toISOString();
+    const existing = this.users.get(userId) ?? {
+      userId,
+      role: 'CITIZEN' as const,
+      civicPoints: 0,
+      lifetimePoints: 0,
+      casesReported: 0,
+      casesResolved: 0,
+      createdAt: now,
+      updatedAt: now,
+    };
+    const next: UserProfile = {
+      ...existing,
+      civicPoints: Math.max(0, (existing.civicPoints ?? 0) + (deltas.civicPoints ?? 0)),
+      lifetimePoints: (existing.lifetimePoints ?? 0) + (deltas.lifetimePoints ?? 0),
+      casesReported: (existing.casesReported ?? 0) + (deltas.casesReported ?? 0),
+      casesResolved: (existing.casesResolved ?? 0) + (deltas.casesResolved ?? 0),
+      updatedAt: now,
+    };
+    this.users.set(userId, next);
+    return next;
+  }
+
+  async putRedemption(redemption: Redemption): Promise<void> {
+    const list = this.redemptions.get(redemption.userId) ?? [];
+    list.push(redemption);
+    this.redemptions.set(redemption.userId, list);
+  }
+
+  async listRedemptions(userId: string, limit = 20): Promise<Redemption[]> {
+    return [...(this.redemptions.get(userId) ?? [])]
+      .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
+      .slice(0, limit);
   }
 }
 

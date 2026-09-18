@@ -297,6 +297,9 @@ or a `Query`. There is no `Scan` in any normal flow.
 | Notification | `USER#<userId>` | `NTF#<notificationId>` | TTL |
 | Idempotency | `IDEMP#<owner>#<key>` | `META` | TTL 24 h |
 | Audit | `AUDIT#<YYYY-MM-DD>` | `<auditId>` | TTL 400 d, immutable |
+| PointsEntry | `USER#<userId>` | `PTS#<entryId>` | Ledger |
+| PointsDedupe | `USER#<userId>` | `PTSKEY#<dedupeKey>` | Award idempotency marker |
+| Redemption | `USER#<userId>` | `RDM#<redemptionId>` | |
 
 A case and everything belonging to it share a partition, so the case detail
 screen — case, timeline, evidence — is a handful of queries against one
@@ -335,6 +338,9 @@ day past due.
 | Admin aggregates | 7 bounded `Query` on gsi2 (50 each) | bounded, never a scan |
 | Cases due for follow-up | ≤15 bounded `Query` on gsi3 | bounded |
 | My notifications | `Query` PK=`USER#id`, `begins_with(sk,'NTF#')` | 1 partition |
+| My points ledger | `Query` PK=`USER#id`, `begins_with(sk,'PTS#')` | 1 partition |
+| My redemptions | `Query` PK=`USER#id`, `begins_with(sk,'RDM#')` | 1 partition |
+| Award points | `TransactWriteItems` (entry + marker) + `UpdateItem ADD` | 3 WCU |
 | Audit for a day | `Query` PK=`AUDIT#<day>` | 1 partition |
 | Create case idempotently | `TransactWriteItems` (case + marker), both conditional | 2 WCU |
 
@@ -354,6 +360,46 @@ The client supplies the key; the web app derives a stable one from the
 description text, so two taps on "Create my case" for the same problem cannot
 produce two cases.
 
+### Civic Points
+
+Points are the one feature where the obvious implementation is wrong. A balance
+held as a single mutable number invites two failures: a replayed request awards
+twice, and two concurrent awards race and lose one. Both are exploitable.
+
+The design instead treats points as an append-only ledger with a cached balance:
+
+```
+award(reason, caseId)
+  ├─ TransactWriteItems, both conditional on not existing:
+  │    · PTS#<entryId>          the ledger entry
+  │    · PTSKEY#<reason>#<case> the dedupe marker
+  │  → condition fails ⇒ already awarded ⇒ return, bump nothing
+  └─ UpdateItem  ADD civicPoints :d, lifetimePoints :d
+       atomic increment, not read-modify-write
+```
+
+Three consequences worth stating:
+
+- **A reason can be earned at most once per case.** The dedupe key is
+  `<reason>#<caseId>`, so however many times the triggering request is replayed,
+  the marker already exists.
+- **Duplicate reports cannot mint points.** Case creation is already idempotent
+  on the client's key, and the award is keyed to the resulting case id — so
+  resubmitting the same report returns the same case and awards nothing.
+- **Spending never demotes.** `civicPoints` is the spendable balance;
+  `lifetimePoints` only ever increases and is what drives the citizen level.
+
+Amounts live in `rules/points.ts` and are never read from a request body. The
+profile endpoint explicitly re-writes the server-owned counters when handling a
+`PATCH /me`, so a client cannot set its own balance through a profile edit —
+there is a test for exactly that.
+
+The reward catalogue is knowledge-layer data with the same honesty flag pattern
+as the authority records: `isSampleCatalog: true` on every shipped entry,
+rendered as a visible "Demo catalogue" notice, with redemption issuing an
+obviously-fake `DEMO-` code. A real deployment replaces the records and one
+`issueCode` function; no commerce API is involved at any point.
+
 ### Guest data lifecycle
 
 Demo sessions write real rows. The DynamoDB adapter — not the domain model —
@@ -371,8 +417,9 @@ appended in the same millisecond would sort by a random suffix and a timeline
 could render "resolved" before "escalated". That was a real bug, caught by the
 workflow test, and the counter is the fix.
 
-Retention: audit records 400 days, notifications 60 days, guest data 2 days,
-idempotency markers 24 hours, CloudWatch logs 7 days. Real citizen cases are
+Retention: audit records 400 days, notifications 60 days, guest data 2 days
+(ledger and redemptions included), idempotency markers 24 hours, CloudWatch logs
+7 days. Real citizen cases are
 kept until deleted — a case history is the artefact a citizen quotes back to an
 authority, so expiring it would defeat the product.
 
@@ -627,6 +674,17 @@ modules with `eval`; production never gets it.
 **In-app notifications only.** Email needs SES and a sandbox exit; SMS costs per
 message. Both were out of scope for a free-tier build, and an unread in-app
 reminder does not pretend to be an email that was never sent.
+
+**Gamification kept deliberately quiet.** Points, one progress bar and four level
+names — no streaks, no badge wall, no confetti. The risk with rewarding civic
+reporting is incentivising volume over usefulness, so the largest award is for a
+problem being *resolved*, not for filing one. A tool that turns complaints into a
+scoring game would flood authorities and discredit the genuine reports.
+
+**A placeholder reward catalogue rather than real partners.** Naming brands that
+have not agreed to anything would be the single most damaging thing this project
+could ship, so the catalogue is fictional, flagged in the data, badged in the UI,
+and issues codes prefixed `DEMO-`.
 
 **Approximate admin aggregates.** Bounded queries instead of exact counts. The
 dashboard says so on the page.

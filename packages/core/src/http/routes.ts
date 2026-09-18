@@ -3,6 +3,9 @@ import type { ServiceContext } from '../services/context.js';
 import { CaseService } from '../services/case-service.js';
 import { EvidenceService } from '../services/evidence-service.js';
 import { AdminService } from '../services/admin-service.js';
+import { RewardsService } from '../services/rewards-service.js';
+import { PointsService } from '../services/points-service.js';
+import { levelProgress } from '../rules/points.js';
 import { AppError } from '../domain/errors.js';
 import { isSafeId } from '../domain/ids.js';
 import { zodIssues } from './responses.js';
@@ -52,6 +55,8 @@ export function buildRoutes(ctx: ServiceContext): RouteDefinition[] {
   const cases = new CaseService(ctx);
   const evidence = new EvidenceService(ctx);
   const admin = new AdminService(ctx);
+  const rewards = new RewardsService(ctx);
+  const points = new PointsService(ctx);
 
   return [
     {
@@ -144,8 +149,19 @@ export function buildRoutes(ctx: ServiceContext): RouteDefinition[] {
       summary: 'Create a tracked case from a reviewed complaint.',
       handler: async (context) => {
         const request = parse(createCaseRequestSchema, context.body);
-        const { case: record, created } = await cases.create(context.auth, request);
-        return { case: record, created };
+        const result = await cases.create(context.auth, request);
+        return {
+          case: result.case,
+          created: result.created,
+          // Surfaced so the UI can show "+60 Civic Points" honestly — it is the
+          // amount actually written to the ledger, not a client-side guess.
+          pointsAwarded: result.pointsAwarded,
+          awards: result.awards.filter((award) => award.awarded).map((award) => ({
+            reason: award.reason,
+            delta: award.delta,
+            levelUp: award.levelUp,
+          })),
+        };
       },
     },
 
@@ -210,7 +226,8 @@ export function buildRoutes(ctx: ServiceContext): RouteDefinition[] {
       summary: 'Close a case as resolved, or as closed without resolution.',
       handler: async (context) => {
         const request = parse(resolveCaseRequestSchema, context.body);
-        return { case: await cases.resolve(context.auth, caseIdOf(context), request) };
+        const result = await cases.resolve(context.auth, caseIdOf(context), request);
+        return { case: result.case, pointsAwarded: result.pointsAwarded, levelUp: result.levelUp };
       },
     },
 
@@ -247,18 +264,26 @@ export function buildRoutes(ctx: ServiceContext): RouteDefinition[] {
       pattern: '/me',
       summary: 'Signed-in profile, plus unread reminders.',
       handler: async (context) => {
-        const profile = await ctx.repository.getUser(context.auth.userId);
-        const notifications = await ctx.repository.listNotifications(context.auth.userId, 20);
+        const [profile, notifications, pointsHistory] = await Promise.all([
+          points.profileOf(context.auth.userId, { email: context.auth.email, role: context.auth.role }),
+          ctx.repository.listNotifications(context.auth.userId, 30),
+          points.history(context.auth.userId, 20),
+        ]);
+
         return {
-          profile: profile ?? {
-            userId: context.auth.userId,
-            email: context.auth.email,
-            role: context.auth.role,
-            createdAt: isoNow(ctx.clock.now()),
-            updatedAt: isoNow(ctx.clock.now()),
-          },
+          profile,
           role: context.auth.role,
           notifications,
+          unreadCount: notifications.filter((item) => !item.read).length,
+          // Level is derived from lifetime points, so redeeming never demotes.
+          level: levelProgress(profile.lifetimePoints),
+          impact: {
+            casesReported: profile.casesReported,
+            casesResolved: profile.casesResolved,
+            civicPoints: profile.civicPoints,
+            lifetimePoints: profile.lifetimePoints,
+          },
+          pointsHistory,
         };
       },
     },
@@ -269,17 +294,24 @@ export function buildRoutes(ctx: ServiceContext): RouteDefinition[] {
       summary: 'Update display name and default location.',
       handler: async (context) => {
         const request = parse(profileUpdateRequestSchema, context.body);
-        const existing = await ctx.repository.getUser(context.auth.userId);
-        const now = isoNow(ctx.clock.now());
-        const profile = await ctx.repository.putUser({
-          userId: context.auth.userId,
+        const existing = await points.profileOf(context.auth.userId, {
           email: context.auth.email,
+          role: context.auth.role,
+        });
+        const profile = await ctx.repository.putUser({
+          ...existing,
+          email: context.auth.email ?? existing.email,
           // Role comes from the identity token, never from the request body.
           role: context.auth.role,
-          displayName: request.displayName ?? existing?.displayName,
-          defaultLocation: request.defaultLocation ?? existing?.defaultLocation,
-          createdAt: existing?.createdAt ?? now,
-          updatedAt: now,
+          displayName: request.displayName ?? existing.displayName,
+          defaultLocation: request.defaultLocation ?? existing.defaultLocation,
+          // Point and impact counters are server-owned; a profile edit must not
+          // be a way to rewrite them.
+          civicPoints: existing.civicPoints,
+          lifetimePoints: existing.lifetimePoints,
+          casesReported: existing.casesReported,
+          casesResolved: existing.casesResolved,
+          updatedAt: isoNow(ctx.clock.now()),
         });
         return { profile };
       },
@@ -293,6 +325,40 @@ export function buildRoutes(ctx: ServiceContext): RouteDefinition[] {
         const notificationId = context.params.notificationId;
         if (!isSafeId(notificationId)) throw AppError.notFound();
         await ctx.repository.markNotificationRead(context.auth.userId, notificationId);
+        return { ok: true };
+      },
+    },
+
+    {
+      method: 'GET',
+      pattern: '/rewards',
+      summary: 'Reward catalogue with the signed-in citizen\u2019s balance, level and redemptions.',
+      handler: async (context) => rewards.overview(context.auth),
+    },
+
+    {
+      method: 'POST',
+      pattern: '/rewards/:rewardId/redeem',
+      successStatus: 201,
+      summary: 'Redeem a reward, debiting Civic Points server-side.',
+      handler: async (context) => {
+        const rewardId = context.params.rewardId;
+        if (!isSafeId(rewardId)) throw AppError.notFound("We couldn\u2019t find that reward.");
+        return rewards.redeem(context.auth, rewardId);
+      },
+    },
+
+    {
+      method: 'POST',
+      pattern: '/me/notifications/read-all',
+      summary: 'Mark every reminder as read.',
+      handler: async (context) => {
+        const notifications = await ctx.repository.listNotifications(context.auth.userId, 50);
+        await Promise.all(
+          notifications
+            .filter((item) => !item.read)
+            .map((item) => ctx.repository.markNotificationRead(context.auth.userId, item.notificationId)),
+        );
         return { ok: true };
       },
     },

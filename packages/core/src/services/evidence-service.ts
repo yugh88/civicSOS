@@ -6,6 +6,7 @@ import { newCaseEventId, newEvidenceId } from '../domain/ids.js';
 import { assertCanAccessEvidence, assertCanWriteCase } from './authorization.js';
 import { isoNow } from '../util/time.js';
 import { MAX_EVIDENCE_BYTES } from '../schemas/common.js';
+import { PointsService } from './points-service.js';
 
 /**
  * Evidence service.
@@ -45,7 +46,11 @@ export interface EvidenceView extends Omit<EvidenceItem, 'storageKey' | 'uploade
 }
 
 export class EvidenceService {
-  constructor(private readonly ctx: ServiceContext) {}
+  private readonly points: PointsService;
+
+  constructor(private readonly ctx: ServiceContext) {
+    this.points = new PointsService(ctx);
+  }
 
   /** Step 1: reserve a slot and hand back a pre-signed PUT. */
   async reserveUpload(auth: AuthContext, caseId: string, request: EvidenceUploadRequest): Promise<UploadReservation> {
@@ -151,6 +156,10 @@ export class EvidenceService {
       occurredAt: isoNow(now),
       detail: { evidenceCount: confirmedCount },
     });
+
+    // Once per case, however many files are attached: the bonus is for
+    // providing evidence at all, not for uploading repeatedly.
+    await this.points.awardForEvidence(record);
 
     await this.ctx.audit.record({
       auth,

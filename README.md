@@ -63,6 +63,45 @@ Supported categories today: **roads and potholes**, **garbage and sanitation**,
 category is a data change in the knowledge layer plus a resolution path — no
 application code changes. See [ARCHITECTURE.md](ARCHITECTURE.md#extending-the-knowledge-layer).
 
+### Screens
+
+| Route | What it is |
+| --- | --- |
+| `/` | Home — the pitch, the categories, community impact |
+| `/report` | **The primary journey.** Describe → plan → complaint → tracked case |
+| `/cases` | Dashboard: summary tiles, filters, scannable case rows |
+| `/cases/[id]` | Case detail: progress rail, "what happens next", evidence, history |
+| `/rewards` | Civic Points balance, citizen level, reward catalogue |
+| `/profile` | Identity, level progress, impact, points activity |
+| `/notifications` | Reminders, escalation windows, points earned |
+| `/settings` | Details used to pre-fill complaints, privacy summary |
+| `/admin` | Staff dashboard (ADMIN only) |
+| `/about` | What CivicSOS is and is not |
+
+Light mode only, mobile-first, one indigo accent. Colour is used where it means
+something — teal for progress, amber for rewards, red only for genuine urgency —
+and nowhere for decoration.
+
+### Civic Points
+
+Participation is rewarded, but only the *useful* kind: filing a report earns 50,
+completing every required detail 10, adding verified evidence 10, and a problem
+actually being **resolved** 100. Points cannot be farmed by filing thin reports.
+
+Every award is calculated on the server and written through an idempotent ledger
+keyed `<reason>#<caseId>`, so a reason can be earned at most once per case however
+many times the request is replayed — and because case creation is itself
+idempotent, resubmitting the same report cannot mint a second award. Nothing
+about points is ever read from a request body; a profile update that tries to set
+its own balance is ignored. Citizen levels (Bronze → Silver → Gold → Community
+Champion) are driven by *lifetime* points, so redeeming a reward never demotes
+anyone.
+
+The reward catalogue ships as a **placeholder with fictional partners**, flagged
+in the data and badged in the UI. CivicSOS has no confirmed sponsors, redemption
+issues an obviously-fake `DEMO-` code, and no commerce API or payment flow is
+involved. Swapping in real partners is a data change plus one function.
+
 ### The differentiator: "What happens next?"
 
 Every case answers, on one screen: what happened, who handles it, what you need,
@@ -85,6 +124,10 @@ no tool:
 - **It is not a government service** and is not affiliated with any government body.
 - **Demo data is unmistakable.** Sample cases carry a `Demo data` badge, a
   persistent session banner, and are counted separately in the admin dashboard.
+- **The reward catalogue is a placeholder.** Fictional partners, `DEMO-` codes,
+  and a notice saying so on the page. No sponsor is claimed.
+- **Community impact figures on the home page are labelled illustrative** —
+  they are not presented as live platform statistics.
 - **When the AI is unavailable, it says so** and falls back to its own rules
   rather than silently degrading.
 
@@ -186,9 +229,11 @@ npm install
 npm run dev
 ```
 
-Open <http://localhost:3000> and click **Try the demo**. You get a private,
-temporary session with four sample cases, including one deliberately old enough
-that escalation guidance has unlocked.
+Open <http://localhost:3000> and click **Try the demo**. You land straight on the
+report screen with a private, temporary session already seeded: four sample
+cases (one deliberately old enough that escalation has unlocked), a points
+balance partway to Silver Citizen, unread reminders in the bell, and a matching
+points ledger.
 
 In local mode the Next.js server runs the *same* router, services and rules as the
 deployed Lambda, against in-memory adapters — so the code path you develop is the
@@ -211,7 +256,7 @@ curl -X POST http://localhost:3000/api/dev/sweep
 
 ```bash
 npm run verify     # typecheck every workspace, run the test suite, production build
-npm test           # 131 tests: rules, AI fallback, authorization, API contract
+npm test           # 154 tests: rules, AI fallback, authorization, points, API contract
 npm run openapi    # regenerate docs/openapi.json from the live route table
 ```
 
@@ -219,8 +264,10 @@ The suite covers the things that would actually hurt: cross-user access on every
 read and write path, unauthenticated access to every private endpoint, malformed
 and malicious AI responses, prompt injection, request size limits, path traversal
 through ids, duplicate submissions, evidence that never finished uploading,
-expired upload grants, escalation attempted too early, and the reminder sweep's
-idempotency.
+expired upload grants, escalation attempted too early, the reminder sweep's
+idempotency, and — for the points system — replayed awards, client-supplied
+balances, level gating, insufficient funds, and the guarantee that spending never
+demotes a citizen.
 
 ## Deploy
 

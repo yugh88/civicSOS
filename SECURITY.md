@@ -29,6 +29,11 @@ This document states what is protected, how, and — as importantly — what is 
 | Using the service as free object storage | 8 MB per file, 6 files per case, upload only into your own case | `evidence.test.ts` |
 | Denial of wallet (running up an AWS bill) | Gateway throttle, per-user AI limit, 64 KB bodies, budget alarms | `security.test.ts` (limiter), [COST.md](COST.md) |
 | Duplicate case creation from a retry | Conditional `TransactWriteItems` on an idempotency key | `workflow.test.ts` |
+| Minting Civic Points by replaying a request | Ledger dedupe key `<reason>#<caseId>`, written conditionally | `points.test.ts` |
+| Farming points with duplicate reports | Award keyed to the case id; case creation is itself idempotent | `points.test.ts` |
+| Setting your own points balance | Amounts are server-calculated; `PATCH /me` rewrites server-owned counters | `points.test.ts` |
+| Redeeming a reward you cannot afford or are not eligible for | Server-side balance and level checks before any debit | `points.test.ts` |
+| Losing an award to a concurrent write | `UpdateItem ADD`, an atomic increment rather than read-modify-write | Adapter design |
 | Skipping the workflow (e.g. resolve a draft) | Explicit status machine, validated server-side | `workflow.test.ts` |
 | Leaking internals through an error | Every error becomes a safe envelope; internals only in logs | `responses.ts`, `security.test.ts` |
 | XSS through complaint text | React escapes on render; control and invisible characters stripped at storage; strict CSP | `sanitize.test.ts` |
@@ -319,16 +324,24 @@ trustworthy.
 6. **No account deletion or data export endpoint.** A production civic service
    handling personal data needs both. They are not implemented.
 
-7. **Evidence is not scanned for malware.** Files are type- and size-restricted
+7. **Points are not protected against a determined multi-account attacker.** One
+   person can create several accounts and file several genuine-looking reports.
+   The ledger stops replay and duplicate-report abuse, and the largest award
+   requires a *resolution* that a real authority has to deliver, which is hard to
+   fake — but a real rewards programme would need per-account verification and
+   moderation before anything of value was attached to it. Today nothing of value
+   is: the catalogue is a placeholder.
+
+8. **Evidence is not scanned for malware.** Files are type- and size-restricted
    and are only ever served to their own owner behind a short-lived URL with
    `nosniff` and `content-disposition: inline`, but no antivirus scan happens.
 
-8. **No field-level encryption.** Complaint text is encrypted at rest by DynamoDB
+9. **No field-level encryption.** Complaint text is encrypted at rest by DynamoDB
    and in transit by TLS, but not encrypted per-record with a customer key. For
    the sensitivity of this data that is a reasonable position; for a service
    handling, say, whistleblower reports it would not be.
 
-9. **The authority directory is unverified by design.** See the honesty policy in
+10. **The authority directory is unverified by design.** See the honesty policy in
    `knowledge/authorities.ts`. This is a correctness limitation rather than a
    security one, but it is the one most likely to cause real-world harm if
    misrepresented, which is why it is surfaced in the UI on every plan.

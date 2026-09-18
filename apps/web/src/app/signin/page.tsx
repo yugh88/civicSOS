@@ -36,7 +36,9 @@ function SignInContent() {
    * Only one place performs the redirect (the effect below), so a deep-linked
    * demo start cannot race its own navigation against the session watcher.
    */
-  const next = params.get('next') ?? (params.get('demo') === '1' ? '/cases' : '/');
+  // The demo — and a fresh sign-in — lands on the report flow, because that is
+  // where the product's value starts. An explicit `next` still wins.
+  const next = params.get('next') ?? '/report';
 
   // Once a session exists, this page has nothing left to offer.
   useEffect(() => {

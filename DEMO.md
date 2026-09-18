@@ -18,7 +18,9 @@ npm run dev          # or open the deployed Amplify URL
 
 - Open two tabs: the app, and the [architecture diagram](ARCHITECTURE.md#2-system-architecture).
 - Click **Try the demo** once beforehand, then sign out. This warms the Lambda
-  and confirms the demo path works.
+  and confirms the demo path works. Note that the demo now lands you **straight
+  on the report screen** — that is deliberate, and it is the shortest path to the
+  product's value.
 - Have this sentence on your clipboard:
 
   > `There has been garbage outside my apartment for 4 days and it smells terrible now.`
@@ -122,10 +124,16 @@ curl -s -X POST localhost:3000/api/cases/analyze \
 
 ### 1:50 — 2:25 · Tracking, reminders, escalation
 
-Click **Create my case**, then **My cases**.
+Click **Create my case**.
 
-> "Now it's tracked. But a case you forget about is a case that doesn't get
-> fixed — so watch this."
+> "Now it's tracked — and that earned 60 Civic Points. Fifty for filing a real
+> report, ten for giving every detail an official actually needs. The big award,
+> a hundred, comes only when the problem is actually **resolved** — because the
+> thing worth rewarding is the outcome, not the volume of complaints."
+
+Go to **My cases**.
+
+> "A case you forget about is a case that doesn't get fixed — so watch this."
 
 Open **"Uncollected garbage outside an apartment gate for six days"** (the seeded
 overdue case).
@@ -148,6 +156,14 @@ Point at the **Demo data** badge:
 > "And every seeded case is labelled. Demo data is never mistaken for real data
 > — it's counted separately in the admin dashboard too."
 
+Click the **notification bell**, then **Rewards**.
+
+> "The reminders are already there. And points turn into rewards — with the
+> level, the progress, and a catalogue that says plainly it's a placeholder.
+> We have no sponsors, so we don't name real brands and the codes come out
+> marked DEMO. The points and the redemption flow are real; only the partners
+> are fictional."
+
 ---
 
 ### 2:25 — 2:50 · The architecture
@@ -162,7 +178,7 @@ Switch to the architecture diagram. Do not read it out.
 > Cognito for accounts. EventBridge for the daily sweep. Secrets in Parameter
 > Store — free, unlike Secrets Manager.
 >
-> The business logic package imports no AWS SDK at all. That's why 131 tests run
+> The business logic package imports no AWS SDK at all. That's why 154 tests run
 > in under a second, and why the whole product runs locally with no AWS account."
 
 ---
@@ -185,8 +201,10 @@ Switch to the architecture diagram. Do not read it out.
 | 0:55 | "What happens next" | The differentiator |
 | 1:10 | Complaint letter | Ready to submit, blanks not guesses |
 | 1:20 | (talking) | The AI boundary |
-| 1:55 | My cases | Tracking, overdue banner |
+| 1:50 | Case created | +60 Civic Points, earned honestly |
+| 1:58 | My cases | Tracking, summary tiles, overdue banner |
 | 2:05 | Overdue case detail | Reminder + escalation unlocked |
+| 2:18 | Bell → Rewards | Notifications, level, placeholder catalogue |
 | 2:30 | Architecture diagram | AWS, 25 seconds |
 
 ---
@@ -252,6 +270,21 @@ Switch to the architecture diagram. Do not read it out.
 > still needs `'unsafe-inline'` because of Next's inline bootstrap. Both are named
 > in SECURITY.md §10 along with six other known limitations, rather than glossed
 > over.
+
+**"Isn't a points system just going to flood authorities with junk reports?"**
+> That is exactly the failure mode we designed against. Filing earns 50; the
+> largest award, 100, requires the problem to actually be **resolved** — an
+> outcome a real authority has to deliver, which is hard to fake. Every award is
+> idempotent per case, so replaying a request or resubmitting the same report
+> mints nothing. And since the catalogue is a placeholder with no real value
+> attached, there is nothing to farm today. Before attaching anything of value
+> you would want per-account verification, and SECURITY.md says so.
+
+**"Are those real sponsors?"**
+> No, and we say so on the page. Every partner in the catalogue is fictional,
+> the records carry an `isSampleCatalog` flag, and redemption issues a code
+> prefixed `DEMO-`. Naming a brand that hasn't agreed to anything would be the
+> most damaging thing this project could ship.
 
 **"What would you build next?"**
 > Replace the generic authority templates with a verified, city-level directory —

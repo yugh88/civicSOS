@@ -20,6 +20,15 @@ import { isoAddDays, isoNow } from '../util/time.js';
 
 export const DEMO_OWNER_ID = 'demo-citizen';
 
+/**
+ * Points the seeded demo citizen starts with.
+ *
+ * Chosen so the profile shows real progress — partway to Silver Citizen — and
+ * so the Rewards page has some entries affordable and some not. Matches what
+ * the four seeded cases would actually have earned.
+ */
+export const DEMO_POINTS = 220;
+
 interface DemoSpec {
   id: string;
   categoryId: CaseRecord['categoryId'];
@@ -227,6 +236,12 @@ export async function seedDemoData(repository: CaseRepository, now: Date = new D
     userId: DEMO_OWNER_ID,
     displayName: 'Demo Citizen',
     role: 'CITIZEN',
+    // Seeded so the demo shows a citizen partway to Silver, with points already
+    // earned from the resolved case below.
+    civicPoints: DEMO_POINTS,
+    lifetimePoints: DEMO_POINTS,
+    casesReported: DEMO_SPECS.length,
+    casesResolved: DEMO_SPECS.filter((spec) => spec.status === 'RESOLVED').length,
     createdAt: isoNow(now),
     updatedAt: isoNow(now),
   });

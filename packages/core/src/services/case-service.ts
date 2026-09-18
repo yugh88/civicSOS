@@ -25,6 +25,8 @@ import { buildComplaintDraft, remainingPlaceholders } from '../rules/complaint.j
 import { getResolutionPath } from '../knowledge/resolution-paths.js';
 import { assessEscalation, computeFollowUpDate, nextEscalationStep } from '../rules/followup.js';
 import { runAnalysis, type AnalyzeOutcome } from '../ai/pipeline.js';
+import { PointsService, type AwardResult } from './points-service.js';
+import { earnsCompletenessBonus } from '../rules/points.js';
 import { classifyDeterministic } from '../rules/classify.js';
 import { isoNow } from '../util/time.js';
 import { sanitizeLine } from '../util/sanitize.js';
@@ -49,7 +51,11 @@ export interface CaseDetail {
 }
 
 export class CaseService {
-  constructor(private readonly ctx: ServiceContext) {}
+  private readonly points: PointsService;
+
+  constructor(private readonly ctx: ServiceContext) {
+    this.points = new PointsService(ctx);
+  }
 
   /** Step 3 of the journey: understand the problem and produce a plan. */
   async analyze(auth: AuthContext, request: AnalyzeRequest): Promise<AnalyzeOutcome> {
@@ -91,7 +97,10 @@ export class CaseService {
   }
 
   /** Steps 11–12: create the tracked case. */
-  async create(auth: AuthContext, request: CreateCaseRequest): Promise<{ case: CaseRecord; created: boolean }> {
+  async create(
+    auth: AuthContext,
+    request: CreateCaseRequest,
+  ): Promise<{ case: CaseRecord; created: boolean; pointsAwarded: number; awards: AwardResult[] }> {
     const now = this.ctx.clock.now();
     const nowIso = isoNow(now);
 
@@ -148,6 +157,11 @@ export class CaseService {
 
     const { record, created } = await this.ctx.repository.createCase(draft, request.idempotencyKey);
 
+    // Points are a side effect of the real action, never its precondition, and
+    // are idempotent per case — so a replayed create awards nothing extra.
+    const awards = created ? await this.points.awardForNewCase(record, earnsCompletenessBonus(record)) : [];
+    const pointsAwarded = awards.reduce((sum, award) => sum + award.delta, 0);
+
     if (created) {
       await this.appendEvent(record.caseId, {
         type: 'CASE_CREATED',
@@ -168,7 +182,7 @@ export class CaseService {
       detail: created ? 'created' : 'idempotent replay',
     });
 
-    return { case: record, created };
+    return { case: record, created, pointsAwarded, awards };
   }
 
   async list(auth: AuthContext, query: ListCasesQuery): Promise<Page<CaseRecord>> {
@@ -377,7 +391,11 @@ export class CaseService {
   }
 
   /** Step 17: close the case. */
-  async resolve(auth: AuthContext, caseId: string, request: ResolveCaseRequest): Promise<CaseRecord> {
+  async resolve(
+    auth: AuthContext,
+    caseId: string,
+    request: ResolveCaseRequest,
+  ): Promise<{ case: CaseRecord; pointsAwarded: number; levelUp?: string }> {
     const existing = assertCanWriteCase(auth, await this.ctx.repository.getCase(caseId));
     const targetStatus: CaseStatus = request.outcome === 'FIXED' ? 'RESOLVED' : 'CLOSED_UNRESOLVED';
     assertTransition(existing.status, targetStatus);
@@ -395,6 +413,13 @@ export class CaseService {
     };
 
     const saved = await this.ctx.repository.updateCase(next);
+
+    // The large award is for an outcome, not for filing. Only a genuine fix
+    // earns it; closing without a fix does not.
+    const award =
+      request.outcome === 'FIXED'
+        ? await this.points.awardForResolution(saved)
+        : { awarded: false, delta: 0, reason: 'CASE_RESOLVED' as const };
 
     await this.appendEvent(caseId, {
       type: 'RESOLVED',
@@ -415,7 +440,7 @@ export class CaseService {
       detail: request.outcome,
     });
 
-    return saved;
+    return { case: saved, pointsAwarded: award.delta, levelUp: award.levelUp };
   }
 
   async timeline(auth: AuthContext, caseId: string): Promise<CaseEvent[]> {

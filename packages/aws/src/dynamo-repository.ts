@@ -22,6 +22,9 @@ import {
   type ListCasesOptions,
   type NotificationRecord,
   type Page,
+  type PointsEntry,
+  type Redemption,
+  type UserCounterDeltas,
   type UserProfile,
 } from '@civicsos/core';
 import {
@@ -39,6 +42,9 @@ import {
   idempotencyPk,
   notificationSk,
   ownerGsiPk,
+  pointsDedupeSk,
+  pointsSk,
+  redemptionSk,
   statusGsiPk,
   userPk,
 } from './keys.js';
@@ -532,6 +538,150 @@ export class DynamoCaseRepository implements CaseRepository {
       }),
     );
     return profile;
+  }
+
+  /* ---------------------------------------------------------------- */
+  /* Civic points and rewards                                         */
+  /* ---------------------------------------------------------------- */
+
+  /**
+   * Writes a ledger entry and its dedupe marker in one transaction, both
+   * conditional on not already existing.
+   *
+   * This is what makes point awards idempotent: a replayed award fails the
+   * condition, writes nothing, and returns `false` so the caller does not bump
+   * the balance. There is no window in which the marker exists without its
+   * ledger entry, or vice versa.
+   */
+  async putPointsEntry(entry: PointsEntry): Promise<boolean> {
+    const ttl = guestTtl(entry.userId);
+    try {
+      await this.doc.send(
+        new TransactWriteCommand({
+          TransactItems: [
+            {
+              Put: {
+                TableName: this.table,
+                Item: clean({
+                  ...entry,
+                  pk: userPk(entry.userId),
+                  sk: pointsSk(entry.entryId),
+                  entity: 'POINTS_ENTRY',
+                  ttl,
+                }),
+                ConditionExpression: 'attribute_not_exists(pk)',
+              },
+            },
+            {
+              Put: {
+                TableName: this.table,
+                Item: clean({
+                  pk: userPk(entry.userId),
+                  sk: pointsDedupeSk(entry.dedupeKey),
+                  entity: 'POINTS_DEDUPE',
+                  entryId: entry.entryId,
+                  ttl,
+                }),
+                ConditionExpression: 'attribute_not_exists(sk)',
+              },
+            },
+          ],
+        }),
+      );
+      return true;
+    } catch (error) {
+      if (isTransactionConflict(error)) return false;
+      throw error;
+    }
+  }
+
+  async listPointsEntries(userId: string, limit = 25): Promise<PointsEntry[]> {
+    const result = await this.doc.send(
+      new QueryCommand({
+        TableName: this.table,
+        KeyConditionExpression: 'pk = :pk AND begins_with(sk, :prefix)',
+        ExpressionAttributeValues: { ':pk': userPk(userId), ':prefix': 'PTS#' },
+        ScanIndexForward: false,
+        Limit: limit,
+      }),
+    );
+    return (result.Items ?? []).map((item) => {
+      const { pk, sk, entity, ttl, ...rest } = item;
+      return rest as unknown as PointsEntry;
+    });
+  }
+
+  /**
+   * Atomic counter update.
+   *
+   * `ADD` rather than a read-modify-write, so two concurrent awards cannot
+   * interleave and lose one. `if_not_exists` seeds the identity fields when the
+   * profile row does not exist yet.
+   */
+  async bumpUserCounters(userId: string, deltas: UserCounterDeltas): Promise<UserProfile> {
+    const now = new Date().toISOString();
+    const result = await this.doc.send(
+      new UpdateCommand({
+        TableName: this.table,
+        Key: { pk: userPk(userId), sk: USER_SK },
+        UpdateExpression: [
+          'SET userId = if_not_exists(userId, :userId),',
+          '#role = if_not_exists(#role, :role),',
+          'createdAt = if_not_exists(createdAt, :now),',
+          'updatedAt = :now,',
+          'entity = if_not_exists(entity, :entity)',
+          'ADD civicPoints :points, lifetimePoints :lifetime, casesReported :reported, casesResolved :resolved',
+        ].join(' '),
+        ExpressionAttributeNames: { '#role': 'role' },
+        ExpressionAttributeValues: {
+          ':userId': userId,
+          ':role': 'CITIZEN',
+          ':now': now,
+          ':entity': 'USER',
+          ':points': deltas.civicPoints ?? 0,
+          ':lifetime': deltas.lifetimePoints ?? 0,
+          ':reported': deltas.casesReported ?? 0,
+          ':resolved': deltas.casesResolved ?? 0,
+        },
+        ReturnValues: 'ALL_NEW',
+      }),
+    );
+
+    const { pk, sk, entity, ttl, ...rest } = result.Attributes ?? {};
+    const profile = rest as unknown as UserProfile;
+    // A balance should never be able to go negative, even if a debit raced.
+    return { ...profile, civicPoints: Math.max(0, profile.civicPoints ?? 0) };
+  }
+
+  async putRedemption(redemption: Redemption): Promise<void> {
+    await this.doc.send(
+      new PutCommand({
+        TableName: this.table,
+        Item: clean({
+          ...redemption,
+          pk: userPk(redemption.userId),
+          sk: redemptionSk(redemption.redemptionId),
+          entity: 'REDEMPTION',
+          ttl: guestTtl(redemption.userId),
+        }),
+      }),
+    );
+  }
+
+  async listRedemptions(userId: string, limit = 20): Promise<Redemption[]> {
+    const result = await this.doc.send(
+      new QueryCommand({
+        TableName: this.table,
+        KeyConditionExpression: 'pk = :pk AND begins_with(sk, :prefix)',
+        ExpressionAttributeValues: { ':pk': userPk(userId), ':prefix': 'RDM#' },
+        ScanIndexForward: false,
+        Limit: limit,
+      }),
+    );
+    return (result.Items ?? []).map((item) => {
+      const { pk, sk, entity, ttl, ...rest } = item;
+      return rest as unknown as Redemption;
+    });
   }
 }
 

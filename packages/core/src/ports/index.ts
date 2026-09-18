@@ -5,6 +5,8 @@ import type {
   CaseStatus,
   EvidenceItem,
   NotificationRecord,
+  PointsEntry,
+  Redemption,
   UserProfile,
 } from '../domain/types.js';
 
@@ -67,6 +69,33 @@ export interface CaseRepository {
 
   getUser(userId: string): Promise<UserProfile | undefined>;
   putUser(profile: UserProfile): Promise<UserProfile>;
+
+  /**
+   * Writes a points ledger entry, or reports that one already exists.
+   *
+   * Must be conditional on `dedupeKey` being unseen for this user. This is what
+   * makes point awards idempotent: a replayed request writes nothing and
+   * returns `false`, so the caller knows not to bump the balance.
+   */
+  putPointsEntry(entry: PointsEntry): Promise<boolean>;
+  listPointsEntries(userId: string, limit?: number): Promise<PointsEntry[]>;
+
+  /**
+   * Atomically adjusts a user's counters, creating the profile if absent.
+   * Separate from `putUser` because it must be an atomic increment, not a
+   * read-modify-write that two concurrent awards could interleave on.
+   */
+  bumpUserCounters(userId: string, deltas: UserCounterDeltas): Promise<UserProfile>;
+
+  putRedemption(redemption: Redemption): Promise<void>;
+  listRedemptions(userId: string, limit?: number): Promise<Redemption[]>;
+}
+
+export interface UserCounterDeltas {
+  civicPoints?: number;
+  lifetimePoints?: number;
+  casesReported?: number;
+  casesResolved?: number;
 }
 
 export interface UploadTarget {
