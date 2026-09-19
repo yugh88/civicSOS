@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 import { App, Tags } from 'aws-cdk-lib';
 import { CivicSosStack } from '../lib/civicsos-stack';
+import { EdgeStack } from '../lib/edge-stack';
 
 /**
  * CDK entry point.
@@ -37,7 +38,29 @@ if (allowedOrigins.length === 0) {
 const alertEmail = app.node.tryGetContext('alertEmail') ?? process.env.ALERT_EMAIL;
 const budgetContext = app.node.tryGetContext('monthlyBudgetUsd') ?? process.env.MONTHLY_BUDGET_USD;
 
+/**
+ * The WAF web ACL must live in us-east-1 — an AWS constraint for CloudFront
+ * scope, regardless of where everything else runs. `crossRegionReferences`
+ * lets the main stack read its ARN without a manual copy-paste step.
+ */
+const edge = new EdgeStack(app, `CivicSos-${stage}-edge`, {
+  stage,
+  env: { account: process.env.CDK_DEFAULT_ACCOUNT, region: 'us-east-1' },
+  crossRegionReferences: true,
+  description: `CivicSOS ${stage} — WAF web ACL for the API edge.`,
+});
+
+/**
+ * A new AWS account cannot create CloudFront distributions until AWS verifies
+ * it. Deploy with `-c enableEdge=false` to bring everything else up, then flip
+ * it back on once verification lands.
+ */
+const enableEdge = app.node.tryGetContext('enableEdge') !== 'false';
+
 const stack = new CivicSosStack(app, `CivicSos-${stage}`, {
+  webAclArn: enableEdge ? edge.webAclArn : undefined,
+  enableEdge,
+  crossRegionReferences: true,
   stage,
   allowedOrigins,
   alertEmail,
@@ -50,6 +73,8 @@ const stack = new CivicSosStack(app, `CivicSos-${stage}`, {
 });
 
 // Tags make per-project cost attribution possible in Cost Explorer.
-Tags.of(stack).add('Project', 'CivicSOS');
-Tags.of(stack).add('Stage', stage);
-Tags.of(stack).add('ManagedBy', 'cdk');
+for (const target of [stack, edge]) {
+  Tags.of(target).add('Project', 'CivicSOS');
+  Tags.of(target).add('Stage', stage);
+  Tags.of(target).add('ManagedBy', 'cdk');
+}

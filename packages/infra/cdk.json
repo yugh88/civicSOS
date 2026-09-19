@@ -1,11 +1,20 @@
 {
   "app": "npx ts-node --prefer-ts-exts bin/app.ts",
-  "watch": { "exclude": ["**/*.d.ts", "**/node_modules/**", "cdk.out/**"] },
+  "watch": {
+    "exclude": [
+      "**/*.d.ts",
+      "**/node_modules/**",
+      "cdk.out/**"
+    ]
+  },
   "context": {
     "stage": "dev",
     "@aws-cdk/aws-lambda:recognizeLayerVersion": true,
     "@aws-cdk/core:checkSecretUsage": true,
     "@aws-cdk/aws-iam:minimizePolicies": true,
-    "@aws-cdk/core:target-partitions": ["aws"]
+    "@aws-cdk/core:target-partitions": [
+      "aws"
+    ],
+    "@aws-cdk/core:defaultCrossStackReferences": "strong"
   }
 }

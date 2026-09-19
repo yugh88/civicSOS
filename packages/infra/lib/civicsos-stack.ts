@@ -9,6 +9,8 @@ import {
 import * as apigwv2 from 'aws-cdk-lib/aws-apigatewayv2';
 import * as apigwv2Integrations from 'aws-cdk-lib/aws-apigatewayv2-integrations';
 import * as budgets from 'aws-cdk-lib/aws-budgets';
+import * as cloudfront from 'aws-cdk-lib/aws-cloudfront';
+import * as origins from 'aws-cdk-lib/aws-cloudfront-origins';
 import * as cloudwatch from 'aws-cdk-lib/aws-cloudwatch';
 import * as cognito from 'aws-cdk-lib/aws-cognito';
 import * as dynamodb from 'aws-cdk-lib/aws-dynamodb';
@@ -40,6 +42,21 @@ export interface CivicSosStackProps extends StackProps {
   allowedOrigins: string[];
   /** Optional email for budget and error alarms. */
   alertEmail?: string;
+  /**
+   * WAF web ACL ARN from the us-east-1 edge stack. When absent the API is
+   * still fronted by CloudFront, just without WAF.
+   */
+  webAclArn?: string;
+  /**
+   * Whether to place CloudFront in front of the API.
+   *
+   * Switchable because a brand-new AWS account cannot create CloudFront
+   * distributions until AWS verifies it, and the rest of the platform should
+   * not be held hostage to a support ticket. With this off the API is served
+   * straight from API Gateway — which still has stage throttling, TLS and the
+   * application's own limiter, just no WAF or edge cache.
+   */
+  enableEdge?: boolean;
   /** Monthly budget ceiling in USD for the cost alarm. */
   monthlyBudgetUsd?: number;
 }
@@ -386,6 +403,103 @@ export class CivicSosStack extends Stack {
     }
 
     /* ------------------------------------------------------------ */
+    /* Edge: CloudFront + WAF                                       */
+    /* ------------------------------------------------------------ */
+
+    /**
+     * CloudFront in front of the HTTP API.
+     *
+     * Three things it buys, in order of how much they matter here:
+     *
+     *  1. **It is the only way to put WAF on this API.** AWS WAF does not
+     *     support API Gateway HTTP APIs. The alternative was migrating to a
+     *     REST API at 3.5× the request price.
+     *  2. **Shield Standard and TLS at the edge**, so a volumetric flood is
+     *     absorbed at CloudFront rather than turning into Lambda invocations.
+     *  3. **Edge caching for the two public, identical-for-everyone
+     *     endpoints** — the health check and the category catalogue. Everything
+     *     else is per-citizen and explicitly not cached.
+     */
+    const edgeEnabled = props.enableEdge !== false;
+
+    const apiOrigin = new origins.HttpOrigin(`${httpApi.apiId}.execute-api.${this.region}.amazonaws.com`, {
+      protocolPolicy: cloudfront.OriginProtocolPolicy.HTTPS_ONLY,
+      originShieldEnabled: false,
+    });
+
+    /**
+     * Forwards everything the API needs, except Host.
+     *
+     * Host must NOT be forwarded: API Gateway routes on its own domain, and a
+     * forwarded viewer Host makes it reject the request outright. AWS ships a
+     * managed policy for precisely this case — and CloudFront refuses to let
+     * `Authorization` sit in a custom origin-request policy at all, since that
+     * header belongs to the cache key discussion rather than the forwarding one.
+     *
+     * Forwarding is not the same as caching: the cache key comes from the cache
+     * policy below, so the public routes still cache even though every header
+     * reaches the origin.
+     */
+    const originRequestPolicy = cloudfront.OriginRequestPolicy.ALL_VIEWER_EXCEPT_HOST_HEADER;
+
+    /**
+     * Cache policy for the public endpoints.
+     *
+     * Short TTL: the catalogue changes only on deploy, but a stale health check
+     * would be actively misleading during an incident, so a minute is the
+     * ceiling. Authorization is deliberately NOT in the cache key — these
+     * routes are anonymous, and including it would make the cache useless.
+     */
+    const publicCachePolicy = new cloudfront.CachePolicy(this, 'PublicCachePolicy', {
+      cachePolicyName: `${prefix}-public`,
+      defaultTtl: Duration.seconds(60),
+      minTtl: Duration.seconds(0),
+      maxTtl: Duration.seconds(300),
+      headerBehavior: cloudfront.CacheHeaderBehavior.allowList('Origin'),
+      queryStringBehavior: cloudfront.CacheQueryStringBehavior.none(),
+      cookieBehavior: cloudfront.CacheCookieBehavior.none(),
+      enableAcceptEncodingGzip: true,
+      enableAcceptEncodingBrotli: true,
+    });
+
+    const distribution = edgeEnabled
+      ? new cloudfront.Distribution(this, 'ApiDistribution', {
+      comment: `CivicSOS ${stage} API edge`,
+      defaultBehavior: {
+        origin: apiOrigin,
+        // Every other route is per-citizen and carries a bearer token. Caching
+        // any of it would be a data leak between users.
+        cachePolicy: cloudfront.CachePolicy.CACHING_DISABLED,
+        originRequestPolicy,
+        viewerProtocolPolicy: cloudfront.ViewerProtocolPolicy.REDIRECT_TO_HTTPS,
+        allowedMethods: cloudfront.AllowedMethods.ALLOW_ALL,
+        responseHeadersPolicy: cloudfront.ResponseHeadersPolicy.CORS_ALLOW_ALL_ORIGINS_WITH_PREFLIGHT,
+      },
+      additionalBehaviors: {
+        '/health': {
+          origin: apiOrigin,
+          cachePolicy: publicCachePolicy,
+          originRequestPolicy,
+          viewerProtocolPolicy: cloudfront.ViewerProtocolPolicy.REDIRECT_TO_HTTPS,
+          allowedMethods: cloudfront.AllowedMethods.ALLOW_GET_HEAD_OPTIONS,
+        },
+        '/knowledge/*': {
+          origin: apiOrigin,
+          cachePolicy: publicCachePolicy,
+          originRequestPolicy,
+          viewerProtocolPolicy: cloudfront.ViewerProtocolPolicy.REDIRECT_TO_HTTPS,
+          allowedMethods: cloudfront.AllowedMethods.ALLOW_GET_HEAD_OPTIONS,
+        },
+      },
+      // PRICE_CLASS_ALL would add edges the users of this service never touch.
+      priceClass: cloudfront.PriceClass.PRICE_CLASS_200,
+      httpVersion: cloudfront.HttpVersion.HTTP2_AND_3,
+          enableLogging: false,
+          webAclId: props.webAclArn,
+        })
+      : undefined;
+
+    /* ------------------------------------------------------------ */
     /* Observability                                                */
     /* ------------------------------------------------------------ */
 
@@ -462,8 +576,15 @@ export class CivicSosStack extends Stack {
     /* ------------------------------------------------------------ */
 
     new CfnOutput(this, 'ApiBaseUrl', {
-      value: httpApi.apiEndpoint,
+      value: distribution ? `https://${distribution.distributionDomainName}` : httpApi.apiEndpoint,
       description: 'Set this as NEXT_PUBLIC_API_BASE_URL in the web app.',
+    });
+    new CfnOutput(this, 'ApiOriginUrl', {
+      value: httpApi.apiEndpoint,
+      description: 'The API Gateway endpoint. Behind CloudFront when the edge is enabled.',
+    });
+    new CfnOutput(this, 'EdgeEnabled', {
+      value: distribution ? `yes (WAF: ${props.webAclArn ? 'attached' : 'none'})` : 'no',
     });
     new CfnOutput(this, 'UserPoolId', { value: userPool.userPoolId });
     new CfnOutput(this, 'UserPoolClientId', { value: userPoolClient.userPoolClientId });

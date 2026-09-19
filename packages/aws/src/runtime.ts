@@ -1,6 +1,5 @@
 import {
   AppError,
-  InMemoryRateLimiter,
   buildRoutes,
   createAuditWriter,
   createAuthResolver,
@@ -16,6 +15,7 @@ import {
   type ServiceContext,
 } from '@civicsos/core';
 import { DynamoCaseRepository } from './dynamo-repository.js';
+import { DynamoRateLimiter } from './dynamo-rate-limiter.js';
 import { S3ObjectStorage } from './s3-storage.js';
 import { EventBridgeEventPublisher } from './eventbridge-publisher.js';
 import { createCognitoTokenVerifier } from './cognito-auth.js';
@@ -119,9 +119,13 @@ export async function createAwsRuntime(env: AwsEnvironment = process.env as AwsE
     audit: createAuditWriter(repository, logger),
     logger,
     clock: systemClock,
-    // Per-container guard on the only endpoint that can cost money. API Gateway
-    // throttling is the global control; see ARCHITECTURE.md.
-    rateLimiter: new InMemoryRateLimiter(config.analyzeRateLimit, 60_000),
+    // Genuinely global now: a conditional counter in the shared table rather
+    // than one per warm container. See dynamo-rate-limiter.ts.
+    rateLimiter: new DynamoRateLimiter({
+      tableName: required(env, 'TABLE_NAME'),
+      limit: config.analyzeRateLimit,
+      logger,
+    }),
     config,
   };
 
