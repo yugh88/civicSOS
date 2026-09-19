@@ -292,8 +292,18 @@ export interface CaseRecord {
   pathId: string;
   authorityId: string;
   complaint: ComplaintDraft;
-  /** Reference number the citizen received from the official channel, if any. */
+  /** Reference number for the complaint, if one exists. */
   officialReference?: string;
+  /**
+   * How the complaint reached (or will reach) the authority.
+   *
+   * `SIMULATED` means the agent ran the demo submission environment — a local
+   * simulation, never a government portal — and the reference is a `CS-DEMO-`
+   * placeholder. `MANUAL` means the citizen filed it themselves through a real
+   * official channel and typed in the reference they were given. The UI labels
+   * these differently everywhere, because conflating them would be a lie.
+   */
+  submissionMode?: 'SIMULATED' | 'MANUAL';
   submittedAt?: string;
   followUpAt?: string;
   resolvedAt?: string;
@@ -383,6 +393,75 @@ export interface AnalysisResult {
   /** Set when the classifier is not confident and the user should confirm. */
   needsCategoryConfirmation: boolean;
 }
+
+/**
+ * Agent actions.
+ *
+ * The complete, closed set of things the agent is permitted to do. A language
+ * model can suggest nothing outside this list, and each action is gated by
+ * `assertActionAllowed` before it runs.
+ */
+export const AGENT_ACTIONS = [
+  'resolve_jurisdiction',
+  'find_official_channel',
+  'validate_evidence',
+  'generate_complaint',
+  'prepare_submission',
+  'submit_complaint',
+  'verify_submission',
+  'capture_reference',
+  'check_case_status',
+  'prepare_follow_up',
+  'send_follow_up',
+  'evaluate_escalation',
+  'notify_user',
+] as const;
+export type AgentActionId = (typeof AGENT_ACTIONS)[number];
+
+export type AgentStepStatus = 'OK' | 'BLOCKED' | 'SKIPPED';
+
+export interface AgentStep {
+  action: AgentActionId;
+  /** Citizen-facing label, e.g. "Checking your evidence". */
+  title: string;
+  /** One line of what actually happened. Never speculative. */
+  detail: string;
+  status: AgentStepStatus;
+  completedAt: string;
+}
+
+export interface AgentRunResult {
+  runId: string;
+  steps: AgentStep[];
+  /** True when every step completed; false when policy blocked one. */
+  completed: boolean;
+  /** Set once `capture_reference` has run. */
+  reference?: string;
+  submissionMode?: 'SIMULATED' | 'MANUAL';
+  /** Why the run stopped, when it did not complete. */
+  blockedReason?: string;
+  /** Always true for the shipped simulator. Drives the UI's demo labelling. */
+  simulated: boolean;
+}
+
+/**
+ * The phase a case is in, derived from its status and timings.
+ *
+ * Distinct from `CaseStatus`, which is the persisted state machine. The phase
+ * is what the citizen is shown — "Monitoring", "Follow-up ready" — and is
+ * computed, so it can never drift from the underlying record.
+ */
+export const CASE_PHASES = [
+  'PREPARING',
+  'AWAITING_APPROVAL',
+  'SUBMITTED',
+  'MONITORING',
+  'FOLLOW_UP_READY',
+  'ESCALATION_READY',
+  'RESOLVED',
+  'CLOSED',
+] as const;
+export type CasePhase = (typeof CASE_PHASES)[number];
 
 export interface AuthContext {
   userId: string;

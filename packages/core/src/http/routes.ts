@@ -4,12 +4,15 @@ import { CaseService } from '../services/case-service.js';
 import { EvidenceService } from '../services/evidence-service.js';
 import { AdminService } from '../services/admin-service.js';
 import { RewardsService } from '../services/rewards-service.js';
+import { AgentService } from '../services/agent-service.js';
+import { PHASE_LABELS, PHASE_MESSAGES, casePhase } from '../rules/agent.js';
 import { PointsService } from '../services/points-service.js';
 import { levelProgress } from '../rules/points.js';
 import { AppError } from '../domain/errors.js';
 import { isSafeId } from '../domain/ids.js';
 import { zodIssues } from './responses.js';
 import {
+  agentRunRequestSchema,
   analyzeRequestSchema,
   createCaseRequestSchema,
   evidenceConfirmRequestSchema,
@@ -56,6 +59,7 @@ export function buildRoutes(ctx: ServiceContext): RouteDefinition[] {
   const evidence = new EvidenceService(ctx);
   const admin = new AdminService(ctx);
   const rewards = new RewardsService(ctx);
+  const agent = new AgentService(ctx);
   const points = new PointsService(ctx);
 
   return [
@@ -172,15 +176,56 @@ export function buildRoutes(ctx: ServiceContext): RouteDefinition[] {
       handler: async (context) => {
         const query = parse(listCasesQuerySchema, context.query);
         const page = await cases.list(context.auth, query);
-        return { cases: page.items, cursor: page.cursor };
+        const now = ctx.clock.now();
+        return {
+          cases: page.items.map((record) => {
+            const phase = casePhase(record, now);
+            return { ...record, phase, phaseLabel: PHASE_LABELS[phase], phaseMessage: PHASE_MESSAGES[phase] };
+          }),
+          cursor: page.cursor,
+        };
       },
     },
 
     {
       method: 'GET',
       pattern: '/cases/:caseId',
-      summary: 'Case detail with the live resolution plan, timeline and escalation state.',
-      handler: async (context) => cases.detail(context.auth, caseIdOf(context)),
+      summary: 'Case detail with the live resolution plan, timeline, phase and escalation state.',
+      handler: async (context) => {
+        const detail = await cases.detail(context.auth, caseIdOf(context));
+        const phase = casePhase(detail.case, ctx.clock.now());
+        return {
+          ...detail,
+          // Derived, never stored, so it cannot contradict the record.
+          phase,
+          phaseLabel: PHASE_LABELS[phase],
+          phaseMessage: PHASE_MESSAGES[phase],
+        };
+      },
+    },
+
+    {
+      method: 'POST',
+      pattern: '/cases/:caseId/agent/submit',
+      summary: 'Agent prepares and submits the complaint. Requires explicit approval.',
+      handler: async (context) => {
+        const request = parse(agentRunRequestSchema, context.body);
+        const result = await agent.submit(context.auth, caseIdOf(context), request);
+        const phase = casePhase(result.case, ctx.clock.now());
+        return { ...result, phase, phaseLabel: PHASE_LABELS[phase], phaseMessage: PHASE_MESSAGES[phase] };
+      },
+    },
+
+    {
+      method: 'POST',
+      pattern: '/cases/:caseId/agent/follow-up',
+      summary: 'Agent prepares a follow-up; sends it only when approved.',
+      handler: async (context) => {
+        const request = parse(agentRunRequestSchema, context.body);
+        const result = await agent.followUp(context.auth, caseIdOf(context), request);
+        const phase = casePhase(result.case, ctx.clock.now());
+        return { ...result, phase, phaseLabel: PHASE_LABELS[phase], phaseMessage: PHASE_MESSAGES[phase] };
+      },
     },
 
     {

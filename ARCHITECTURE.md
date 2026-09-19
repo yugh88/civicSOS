@@ -492,6 +492,55 @@ recomputed on every edit, so "ready to submit" is never a lie.
 
 ---
 
+## 6a. The agent
+
+The product's promise is that CivicSOS does the repetitive work. The
+architectural problem that creates is authority: something has to act on a
+citizen's behalf, and the thing acting must not be a language model.
+
+The resolution is the same shape as the rest of the system — a closed set of
+actions, a deterministic gate, and a model that contributes language only.
+
+```
+  intent (AI-assisted, schema-validated)
+        ↓
+  deterministic validation  ← knowledge layer, persisted case
+        ↓
+  planner: a fixed ordered list of allowed actions
+        ↓
+  policy gate per action  ← approval, case state, completeness
+        ↓
+  execution  →  verification  →  timeline event  →  audit record
+```
+
+**The action set is closed.** `AGENT_ACTIONS` is thirteen names. There is no
+dynamic dispatch and no path by which a model can name a tool.
+
+**Plans are fixed, not generated.** `SUBMISSION_PLAN` and `FOLLOW_UP_PLAN` are
+ordered constants. The agent does not decide what to do; it decides whether each
+predetermined step is currently permitted.
+
+**The gate reads only trusted state.** `checkAction` consults the persisted case
+and the knowledge layer. Nothing it looks at can be influenced by model output.
+
+**Submission is a pure function.** `runDemoSubmission` takes a case and returns
+strings. It imports no HTTP client and contains no URL, so the guarantee that a
+demo run cannot reach a real portal is structural rather than procedural.
+
+**Phase is derived, never stored.** `casePhase(record, now)` computes what the
+citizen sees — Preparing, Awaiting approval, Submitted, Monitoring, Follow-up
+ready, Escalation ready — from the persisted status and the clock. `CaseStatus`
+remains the single state machine; the phase is a view of it, so the two cannot
+drift. This is why adding the whole agent required no change to the status
+machine and broke none of the existing tests.
+
+The tradeoff: the agent is not clever. It cannot improvise a route for a problem
+the knowledge layer does not cover, and it will refuse rather than guess. For a
+tool that writes to public bodies on someone's behalf, refusing is the correct
+failure.
+
+---
+
 ## 7. The AI boundary
 
 ### The contract

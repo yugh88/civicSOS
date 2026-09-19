@@ -360,6 +360,94 @@ boundary.
 
 ---
 
+### The agent
+
+#### `POST /cases/{caseId}/agent/submit`
+
+Runs the submission plan. **Requires explicit approval**; without it the policy
+layer refuses and nothing is written.
+
+```json
+{ "approve": true }
+```
+
+```json
+{
+  "runId": "run_...",
+  "steps": [
+    { "action": "resolve_jurisdiction", "title": "Understanding the problem", "detail": "Municipal corporation — sanitation & solid waste management for 12th Main, Bengaluru.", "status": "OK", "completedAt": "..." },
+    { "action": "validate_evidence", "title": "Checking your evidence", "detail": "1 photo and a location — everything the department asks for.", "status": "OK", "completedAt": "..." },
+    { "action": "find_official_channel", "...": "..." },
+    { "action": "generate_complaint", "...": "..." },
+    { "action": "prepare_submission", "...": "..." },
+    { "action": "submit_complaint", "...": "..." },
+    { "action": "verify_submission", "...": "..." },
+    { "action": "capture_reference", "...": "..." },
+    { "action": "notify_user", "...": "..." }
+  ],
+  "completed": true,
+  "reference": "CS-DEMO-87073",
+  "submissionMode": "SIMULATED",
+  "simulated": true,
+  "case": { "...": "..." },
+  "phase": "SUBMITTED",
+  "phaseLabel": "Submitted",
+  "phaseMessage": "You're done. We'll keep watching this one."
+}
+```
+
+> **`simulated: true` is not decoration.** The submission ran against the
+> CivicSOS demo environment — a pure function with no HTTP client and no URL.
+> Nothing reached any authority. The `CS-DEMO-` prefix and
+> `case.submissionMode: "SIMULATED"` carry the same fact, and the UI renders a
+> notice saying so. Never present this as a real government submission.
+
+Refusals, all 409 with an explanation safe to display:
+
+| Condition | Message |
+| --- | --- |
+| `approve` absent | CivicSOS needs your approval before it submits anything. |
+| Already submitted | This complaint has already been submitted. |
+| Complaint has placeholders | The complaint still has blanks that need filling in. |
+| Case closed | This case is already closed. |
+
+Another citizen's case returns **404**, as everywhere else.
+
+#### `POST /cases/{caseId}/agent/follow-up`
+
+Without `approve`, this is a **dry run**: it returns the prepared message and
+stops before `send_follow_up`, so the citizen reads exactly what would go out
+before anything does.
+
+```json
+{ "approve": false }
+```
+
+```json
+{
+  "steps": [
+    { "action": "check_case_status", "detail": "20 day(s) since submission, no response recorded.", "status": "OK", "...": "..." },
+    { "action": "prepare_follow_up", "status": "OK", "...": "..." },
+    { "action": "send_follow_up", "detail": "CivicSOS needs your approval before it sends a follow-up.", "status": "BLOCKED", "...": "..." }
+  ],
+  "completed": false,
+  "draft": "Subject: Follow-up on complaint CS-DEMO-87073\n\nSir / Madam,\n...",
+  "simulated": true
+}
+```
+
+With `approve: true` it sends, advances the case to `AWAITING_RESPONSE`,
+recomputes the follow-up date and evaluates escalation. 409 if the complaint was
+never submitted.
+
+#### Case phase
+
+`GET /cases`, `GET /cases/{id}` and both agent endpoints return `phase`,
+`phaseLabel` and `phaseMessage`. The phase is **derived** from the status and
+the clock — `PREPARING`, `AWAITING_APPROVAL`, `SUBMITTED`, `MONITORING`,
+`FOLLOW_UP_READY`, `ESCALATION_READY`, `RESOLVED`, `CLOSED` — so it can never
+contradict the record. `CaseStatus` remains the persisted state machine.
+
 ### Evidence
 
 #### `POST /cases/{caseId}/evidence` · 201

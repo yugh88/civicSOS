@@ -3,8 +3,12 @@
 ## The one-line pitch
 
 > "Everyone knows what's wrong on their street. Almost nobody knows what to do
-> about it. CivicSOS turns a sentence into a plan — and then makes sure you
-> actually follow it through."
+> about it — so most problems are never reported at all. CivicSOS is an agent
+> that does the whole thing for you. You tell it what happened. It handles the
+> rest."
+
+**The single thing the judges must see:** the agent visibly doing the work at
+1:40. Everything before it is setup; everything after is proof it stuck.
 
 ---
 
@@ -92,7 +96,53 @@ Then scroll to the complaint letter:
 
 ---
 
-### 1:20 — 1:50 · The AI honesty beat
+### 1:20 — 1:40 · Approval
+
+Scroll to the complaint. It is already written, already complete.
+
+> "The complaint is drafted. I read it, I can change anything — and then I
+> approve. Nothing goes anywhere until I do. That's not a setting; the server
+> refuses every acting step without an explicit approval on the request."
+
+Click **Approve & submit**.
+
+---
+
+### 1:40 — 2:05 · The agent does the work
+
+Say nothing for a few seconds. Let the steps land.
+
+> "Understanding the problem. Checking the evidence. Finding the right channel —
+> the Swachhata app, which is a genuine national channel. Preparing the
+> complaint. Filling in the submission. Submitting. Verifying. Reference
+> captured."
+
+Point at the amber notice:
+
+> "And it says plainly what it is. This is CivicSOS's own demo environment, not
+> a government portal. Nothing was sent to any authority, and the reference is
+> prefixed CS-DEMO so it can never be mistaken for a real complaint number.
+> There is no HTTP client in that code path at all — a demo run *cannot* reach a
+> real portal, by construction."
+
+---
+
+### 2:05 — 2:25 · It keeps going
+
+Click **See the result**, then **View my case**.
+
+> "Submitted. Reference captured. And now it's monitoring — it already knows
+> when to check back."
+
+Open the seeded overdue case and click **Prepare the next step**.
+
+> "This one is 20 days old with no response. CivicSOS found that, and it has
+> already written the follow-up quoting the original reference. Again: prepared,
+> not sent. I read it, then I approve."
+
+---
+
+### 2:25 — 2:45 · The AI honesty beat
 
 This is the beat that separates the project from a wrapper. **Say it plainly:**
 
@@ -122,7 +172,7 @@ curl -s -X POST localhost:3000/api/cases/analyze \
 
 ---
 
-### 1:50 — 2:25 · Tracking, reminders, escalation
+### (cut for time) · Tracking, reminders, escalation
 
 Click **Create my case**.
 
@@ -166,7 +216,7 @@ Click the **notification bell**, then **Rewards**.
 
 ---
 
-### 2:25 — 2:50 · The architecture
+### 2:45 — 3:00 · The architecture
 
 Switch to the architecture diagram. Do not read it out.
 

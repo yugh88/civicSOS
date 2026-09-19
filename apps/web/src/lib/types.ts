@@ -55,7 +55,7 @@ export interface EscalationAssessment {
   reason: string;
 }
 
-export interface CaseDetailResponse {
+export interface CaseDetailResponse extends PhaseFields {
   case: CaseRecord;
   plan: ResolutionPlan;
   escalation: EscalationAssessment;
@@ -65,7 +65,7 @@ export interface CaseDetailResponse {
 }
 
 export interface CaseListResponse {
-  cases: CaseRecord[];
+  cases: Array<CaseRecord & Partial<PhaseFields>>;
   cursor?: string;
 }
 
@@ -184,6 +184,44 @@ export interface RedeemResponse {
     createdAt: string;
   };
   balance: number;
+}
+
+export type CasePhase =
+  | 'PREPARING'
+  | 'AWAITING_APPROVAL'
+  | 'SUBMITTED'
+  | 'MONITORING'
+  | 'FOLLOW_UP_READY'
+  | 'ESCALATION_READY'
+  | 'RESOLVED'
+  | 'CLOSED';
+
+export interface PhaseFields {
+  phase: CasePhase;
+  phaseLabel: string;
+  phaseMessage: string;
+}
+
+export interface AgentStep {
+  action: string;
+  title: string;
+  detail: string;
+  status: 'OK' | 'BLOCKED' | 'SKIPPED';
+  completedAt: string;
+}
+
+export interface AgentRunResponse extends PhaseFields {
+  runId: string;
+  steps: AgentStep[];
+  completed: boolean;
+  reference?: string;
+  submissionMode?: 'SIMULATED' | 'MANUAL';
+  blockedReason?: string;
+  /** Always true for the shipped demo environment. */
+  simulated: boolean;
+  case: CaseRecord;
+  /** Present on a follow-up run: the exact message that would be sent. */
+  draft?: string;
 }
 
 export interface CreateCaseResponse {

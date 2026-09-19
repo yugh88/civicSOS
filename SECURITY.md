@@ -35,6 +35,12 @@ This document states what is protected, how, and — as importantly — what is 
 | Redeeming a reward you cannot afford or are not eligible for | Server-side balance and level checks before any debit | `points.test.ts` |
 | Losing an award to a concurrent write | `UpdateItem ADD`, an atomic increment rather than read-modify-write | Adapter design |
 | Skipping the workflow (e.g. resolve a draft) | Explicit status machine, validated server-side | `workflow.test.ts` |
+| Agent submitting without the citizen's approval | Every acting action refused unless `approve: true` is on the request | `agent.test.ts` |
+| Agent submitting the same complaint twice | Policy refuses on an already-submitted case | `agent.test.ts` |
+| Agent acting on someone else's case | Same ownership check as every other path; 404, not 403 | `agent.test.ts` |
+| A simulated submission passing as a real one | `CS-DEMO-` reference, `submissionMode: 'SIMULATED'`, on-screen notice | `agent.test.ts` |
+| A demo run reaching a real government portal | The submission path is a pure function — no HTTP client, no URL | Code structure |
+| A model inventing an authority, channel or reference | None of those come from model output; all are read from the knowledge layer | `agent.test.ts` |
 | Leaking internals through an error | Every error becomes a safe envelope; internals only in logs | `responses.ts`, `security.test.ts` |
 | XSS through complaint text | React escapes on render; control and invisible characters stripped at storage; strict CSP | `sanitize.test.ts` |
 | Cross-site request from another origin | Exact-origin CORS allow-list, never `*` | `security.test.ts` |
@@ -348,7 +354,55 @@ trustworthy.
 
 ---
 
-## 11. Reporting a vulnerability
+## 11. The agent
+
+CivicSOS acts on a citizen's behalf toward a public body. That is precisely the
+place where "the model decided" is not an acceptable answer, so the agent is
+built to be boring and checkable.
+
+**A closed action set.** Thirteen named actions (`AGENT_ACTIONS`), and nothing
+else can run. There is no dynamic dispatch, no tool the model can name, and no
+free-text command path.
+
+**A policy gate in front of every action.** `checkAction` reads only the
+persisted case and the knowledge layer. No parameter it consults can be
+influenced by model output. Acting steps — `prepare_submission`,
+`submit_complaint`, `send_follow_up` — are refused unless:
+
+- the request carries explicit approval from the citizen,
+- the case is open,
+- the complaint has no remaining placeholders, and
+- the case has not already been submitted.
+
+**No network path to a real portal.** The submission step runs against the
+CivicSOS demo environment, which is a pure function returning strings. It has no
+HTTP client, no URL and no credentials. A demo run cannot reach a government
+system because there is no code by which it could. Building brittle browser
+automation against a live government website — with its CAPTCHAs, OTPs and
+availability — would also have been unreliable and, done without permission,
+inappropriate.
+
+**Three independent markers on every simulated submission.** The reference is
+prefixed `CS-DEMO-`, the case is stamped `submissionMode: 'SIMULATED'`, and the
+UI renders a notice saying it is not a government portal. A test asserts all
+three. Presenting a simulation as a real government action would be the single
+most damaging thing this product could do, so it is defended in depth rather
+than by convention.
+
+**Everything it did is on the timeline**, attributed to `agent` rather than to
+the citizen, so the record of who did what stays honest.
+
+### What this does not cover
+
+A deployment that gains a genuine machine-to-machine submission channel replaces
+one function and sets a new submission mode. Before that ships it would need its
+own review: credential handling for the channel, rate limiting against the
+authority, and a way for a citizen to revoke the agent's authority to act. None
+of that exists today, because nothing today actually submits.
+
+---
+
+## 12. Reporting a vulnerability
 
 This is a hackathon project, not a funded service. If you find something, open an
 issue describing the class of problem without a working exploit, and it will be

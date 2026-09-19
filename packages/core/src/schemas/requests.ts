@@ -122,6 +122,17 @@ export const evidenceConfirmRequestSchema = z.object({
   evidenceId: idSchema,
 });
 
+/**
+ * Agent run request.
+ *
+ * `approve` is the entire approval gate as far as the wire is concerned: the
+ * policy layer refuses every acting step without it, so an accidental or
+ * replayed call cannot submit anything.
+ */
+export const agentRunRequestSchema = z.object({
+  approve: z.boolean().optional(),
+});
+
 export const profileUpdateRequestSchema = z.object({
   displayName: line(120).optional(),
   defaultLocation: locationSchema.optional(),
@@ -136,4 +147,5 @@ export type FollowUpRequest = z.infer<typeof followUpRequestSchema>;
 export type MarkSubmittedRequest = z.infer<typeof markSubmittedRequestSchema>;
 export type EvidenceUploadRequest = z.infer<typeof evidenceUploadRequestSchema>;
 export type ProfileUpdateRequest = z.infer<typeof profileUpdateRequestSchema>;
+export type AgentRunRequestInput = z.infer<typeof agentRunRequestSchema>;
 export { ALLOWED_EVIDENCE_TYPES };

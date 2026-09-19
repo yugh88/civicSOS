@@ -58,6 +58,20 @@ export { assessEscalation, computeFollowUpDate, nextEscalationDate, nextEscalati
 export { assembleAnalysis, buildCasePlan, buildResolutionPlan } from './rules/resolution.js';
 export { STATUS_HINTS, STATUS_LABELS, assertTransition, canTransition, isOpen } from './rules/status.js';
 export {
+  ACTION_TITLES,
+  FOLLOW_UP_PLAN,
+  PHASE_LABELS,
+  PHASE_MESSAGES,
+  SUBMISSION_PLAN,
+  assertActionAllowed,
+  casePhase,
+  checkAction,
+  demoReference,
+  describeJurisdiction,
+  selectSubmissionChannel,
+  validateEvidence as validateAgentEvidence,
+} from './rules/agent.js';
+export {
   LEVELS,
   POINT_LABELS,
   POINT_VALUES,
@@ -101,6 +115,7 @@ export { CaseService, type CaseDetail } from './services/case-service.js';
 export { EvidenceService, MAX_EVIDENCE_PER_CASE, type EvidenceView } from './services/evidence-service.js';
 export { ReminderService, type ReminderSweepResult } from './services/reminder-service.js';
 export { AdminService, type AdminOverview } from './services/admin-service.js';
+export { AgentService, type AgentRunRequest } from './services/agent-service.js';
 export { PointsService, type AwardResult } from './services/points-service.js';
 export { RewardsService, type RewardView, type RewardsOverview } from './services/rewards-service.js';
 export { createAuditWriter, type AuditWriter } from './services/audit.js';

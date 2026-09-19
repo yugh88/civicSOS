@@ -167,6 +167,20 @@ budget (default $5) with notifications at **50% of actual** and **100% of
 forecast** spend. Forecast alerting matters: it warns while the month is young
 enough to do something about it.
 
+### The agent — zero marginal cost
+
+Worth stating because "autonomous agent" usually implies a bill: CivicSOS's
+agent makes **no AI calls at all**. Every step it runs is a deterministic
+function over the persisted case and the knowledge layer, executing inside the
+same API Lambda invocation that the citizen's request already paid for. There is
+no agent loop, no planner model, no tool-calling round trips, and no retry
+storm — the plan is a fixed ordered constant.
+
+A full submission run is one Lambda invocation, one DynamoDB write for the case,
+a handful of small writes for the timeline, and one EventBridge event. The
+submission itself is a pure function with no network call, so it costs nothing
+and cannot fail in a way that burns retries.
+
 ### Gemini — free tier only
 
 `gemini-2.0-flash` on the free tier. Chosen over a paid model because
@@ -263,13 +277,15 @@ throttle sets, and the volume alarm fires long before it is approached.
 9. **Bounded event retries** — 2 attempts, 1-hour max age, so a failing target
    cannot loop.
 10. **Volume alarm** — an invocation spike is the early warning for a bill.
-11. **AWS Budget** — 50% actual and 100% forecast email alerts.
-12. **`removalPolicy: DESTROY` on non-production stages** — a dev stage can be
+11. **The agent makes no AI calls** — it is deterministic, so agent usage cannot
+    drive model spend.
+12. **AWS Budget** — 50% actual and 100% forecast email alerts.
+13. **`removalPolicy: DESTROY` on non-production stages** — a dev stage can be
     deleted completely, with nothing orphaned and still billing. Production
     retains data, on purpose.
-13. **Cost allocation tags** — `Project`, `Stage`, `ManagedBy` on every resource,
+14. **Cost allocation tags** — `Project`, `Stage`, `ManagedBy` on every resource,
     so Cost Explorer can attribute spend precisely.
-14. **No billing on the Gemini project** — the hard ceiling on AI spend.
+15. **No billing on the Gemini project** — the hard ceiling on AI spend.
 
 ### Verifying it
 

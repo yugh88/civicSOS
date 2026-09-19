@@ -14,8 +14,9 @@ import {
   formatRelative,
   placeholderLabel,
 } from '@/lib/format';
-import type { CaseDetailResponse, CaseStatus, ResolveCaseResponse } from '@/lib/types';
+import type { AgentRunResponse, CaseDetailResponse, CasePhase, CaseStatus, ResolveCaseResponse } from '@/lib/types';
 import { notifyProfileChanged } from '@/lib/profile-events';
+import { AgentExecution, SimulationNotice } from '@/components/AgentExecution';
 import { CaseTimeline } from '@/components/CaseTimeline';
 import { EvidenceUploader } from '@/components/EvidenceUploader';
 import { PlanView } from '@/components/PlanView';
@@ -45,6 +46,7 @@ import {
   IconEscalate,
   IconLocation,
   IconSend,
+  IconSparkle,
 } from '@/components/icons';
 
 /**
@@ -78,6 +80,18 @@ const STATUS_HINTS: Record<string, string> = {
   CLOSED_UNRESOLVED: 'Closed without resolution. You can still escalate this later.',
 };
 
+/** Phase drives the headline badge; it is derived, never stored. */
+const PHASE_TONE: Record<CasePhase, 'neutral' | 'accent' | 'teal' | 'good' | 'warn' | 'gold' | 'bad'> = {
+  PREPARING: 'neutral',
+  AWAITING_APPROVAL: 'accent',
+  SUBMITTED: 'accent',
+  MONITORING: 'teal',
+  FOLLOW_UP_READY: 'warn',
+  ESCALATION_READY: 'bad',
+  RESOLVED: 'good',
+  CLOSED: 'neutral',
+};
+
 /** The five milestones shown as the case's headline progress. */
 const PROGRESS_STAGES = ['Reported', 'Analysed', 'Submitted', 'In progress', 'Resolved'] as const;
 
@@ -104,6 +118,8 @@ export default function CaseDetailPage() {
   const [actionError, setActionError] = useState<string | undefined>();
   const [actionNotice, setActionNotice] = useState<string | undefined>();
   const [pointsNotice, setPointsNotice] = useState<{ points: number; levelUp?: string } | undefined>();
+  const [agentRun, setAgentRun] = useState<AgentRunResponse | undefined>();
+  const [agentBusy, setAgentBusy] = useState(false);
   const [busy, setBusy] = useState<string | undefined>();
 
   useEffect(() => {
@@ -150,6 +166,48 @@ export default function CaseDetailPage() {
     },
     [api, load],
   );
+
+  /** Prepares the follow-up (dry run) or sends it, depending on `approve`. */
+  const runFollowUpAgent = useCallback(
+    async (approve: boolean) => {
+      setAgentBusy(true);
+      setActionError(undefined);
+      try {
+        const run = await api<AgentRunResponse>(`/cases/${caseId}/agent/follow-up`, {
+          method: 'POST',
+          body: { approve },
+        });
+        setAgentRun(run);
+        if (approve) {
+          await load();
+          setActionNotice('Follow-up sent. We will check again after the next window.');
+        }
+      } catch (caught) {
+        setActionError(caught instanceof Error ? caught.message : 'That did not work.');
+      } finally {
+        setAgentBusy(false);
+      }
+    },
+    [api, caseId, load],
+  );
+
+  const runSubmitAgent = useCallback(async () => {
+    setAgentBusy(true);
+    setActionError(undefined);
+    try {
+      const run = await api<AgentRunResponse>(`/cases/${caseId}/agent/submit`, {
+        method: 'POST',
+        body: { approve: true },
+      });
+      setAgentRun(run);
+      await load();
+      setActionNotice(`Submitted. Reference ${run.reference}.`);
+    } catch (caught) {
+      setActionError(caught instanceof Error ? caught.message : 'That did not work.');
+    } finally {
+      setAgentBusy(false);
+    }
+  }, [api, caseId, load]);
 
   if (sessionLoading || loading) return <CaseDetailSkeleton />;
   if (!session) return null;
@@ -202,8 +260,8 @@ export default function CaseDetailPage() {
       {/* ---------------------------------------------------------------- */}
       <header className="space-y-4">
         <div className="flex flex-wrap items-center gap-2">
-          <Badge tone={STATUS_TONE[record.status]} icon={<Dot tone={STATUS_TONE[record.status]} />}>
-            {STATUS_LABELS[record.status]}
+          <Badge tone={PHASE_TONE[detail.phase] ?? STATUS_TONE[record.status]} icon={<Dot tone={PHASE_TONE[detail.phase] ?? STATUS_TONE[record.status]} />}>
+            {detail.phaseLabel ?? STATUS_LABELS[record.status]}
           </Badge>
           <Badge tone="accent" icon={<CategoryIcon categoryId={record.categoryId} className="h-3.5 w-3.5" />}>
             {plan.categoryLabel}
@@ -215,7 +273,9 @@ export default function CaseDetailPage() {
         <h1 className="text-[26px] font-semibold leading-snug tracking-tight text-ink sm:text-[30px]">
           {record.summary}
         </h1>
-        <p className="text-[15px] text-ink-muted">{STATUS_HINTS[record.status]}</p>
+        {/* The phase is derived server-side, so it can never contradict the
+            record it describes. */}
+        <p className="text-[15px] text-ink-muted">{detail.phaseMessage ?? STATUS_HINTS[record.status]}</p>
 
         <ProgressRail stage={stage} closedWithoutFix={record.status === 'CLOSED_UNRESOLVED'} />
 
@@ -276,6 +336,16 @@ export default function CaseDetailPage() {
           </Button>
         </Alert>
       ) : null}
+
+      <AgentPanel
+        detail={detail}
+        busy={agentBusy}
+        run={agentRun}
+        onSubmit={runSubmitAgent}
+        onPrepareFollowUp={() => runFollowUpAgent(false)}
+        onSendFollowUp={() => runFollowUpAgent(true)}
+        onDismissRun={() => setAgentRun(undefined)}
+      />
 
       <ActionBar
         detail={detail}
@@ -420,6 +490,139 @@ function Fact({ label, icon, children }: { label: string; icon?: React.ReactNode
       </dt>
       <dd className="mt-1.5 text-sm font-medium leading-snug text-ink">{children}</dd>
     </div>
+  );
+}
+
+/**
+ * What CivicSOS did, and what it will do next.
+ *
+ * The centrepiece of the case screen: the citizen should be able to see, at a
+ * glance, that work is being done on their behalf and exactly what the next
+ * action is. Every action here is gated by the server — the buttons reflect a
+ * decision the policy layer has already made.
+ */
+function AgentPanel({
+  detail,
+  busy,
+  run,
+  onSubmit,
+  onPrepareFollowUp,
+  onSendFollowUp,
+  onDismissRun,
+}: {
+  detail: CaseDetailResponse;
+  busy: boolean;
+  run?: AgentRunResponse;
+  onSubmit: () => void;
+  onPrepareFollowUp: () => void;
+  onSendFollowUp: () => void;
+  onDismissRun: () => void;
+}) {
+  const { case: record, phase, escalation } = detail;
+  const simulated = record.submissionMode === 'SIMULATED';
+
+  const did = record.submittedAt
+    ? simulated
+      ? `CivicSOS submitted your complaint and captured reference ${record.officialReference}.`
+      : `You submitted this${record.officialReference ? `, reference ${record.officialReference}` : ''}.`
+    : 'CivicSOS worked out the route, checked your evidence and prepared the complaint.';
+
+  const next: Record<CasePhase, string> = {
+    PREPARING: 'Fill in the remaining blanks, then approve it and CivicSOS will submit it.',
+    AWAITING_APPROVAL: 'Approve it and CivicSOS will submit it for you.',
+    SUBMITTED: `We will check for a response around ${formatDate(record.followUpAt)}.`,
+    MONITORING: `We will check again around ${formatDate(record.followUpAt)}.`,
+    FOLLOW_UP_READY: 'No response in the expected window. We have prepared the next step.',
+    ESCALATION_READY: `Escalation step ${escalation.availableLevel} is now appropriate.`,
+    RESOLVED: 'Nothing further needed. The history stays here if it comes back.',
+    CLOSED: 'Closed without a resolution. You can still escalate later.',
+  };
+
+  return (
+    <Card className="overflow-hidden">
+      <div className="border-b border-line bg-accent-soft/40 px-5 py-3.5 sm:px-6">
+        <p className="flex items-center gap-2 text-sm font-semibold text-ink">
+          <IconSparkle aria-hidden="true" className="h-[18px] w-[18px] text-accent" />
+          CivicSOS Agent
+        </p>
+      </div>
+
+      <div className="space-y-4 p-5 sm:p-6">
+        <div className="grid gap-3 sm:grid-cols-2">
+          <div className="rounded-xl bg-surface-soft p-4">
+            <p className="text-xs font-medium uppercase tracking-wide text-ink-faint">What CivicSOS did</p>
+            <p className="mt-1.5 text-sm leading-relaxed text-ink">{did}</p>
+          </div>
+          <div className="rounded-xl bg-surface-soft p-4">
+            <p className="text-xs font-medium uppercase tracking-wide text-ink-faint">What happens next</p>
+            <p className="mt-1.5 text-sm leading-relaxed text-ink">{next[phase]}</p>
+          </div>
+        </div>
+
+        {simulated ? <SimulationNotice /> : null}
+
+        {/* Follow-up found something. Lead with the finding, not the button. */}
+        {(phase === 'FOLLOW_UP_READY' || phase === 'ESCALATION_READY') && !run ? (
+          <Alert tone="warn" title="CivicSOS found something">
+            <p>We haven&apos;t received a response within the expected window.</p>
+            <Button
+              size="sm"
+              className="mt-3"
+              loading={busy}
+              onClick={onPrepareFollowUp}
+              icon={<IconSparkle className="h-4 w-4" />}
+            >
+              Prepare the next step
+            </Button>
+          </Alert>
+        ) : null}
+
+        {phase === 'AWAITING_APPROVAL' ? (
+          <div className="flex flex-wrap items-center gap-3">
+            <Button size="sm" loading={busy} onClick={onSubmit} icon={<IconSend className="h-4 w-4" />}>
+              Approve &amp; submit
+            </Button>
+            <span className="text-xs text-ink-muted">CivicSOS will not submit anything until you approve.</span>
+          </div>
+        ) : null}
+
+        {run ? (
+          <div className="space-y-3">
+            <AgentExecution
+              steps={run.steps}
+              running={busy}
+              title={run.completed ? 'Here is what CivicSOS did' : 'Here is what CivicSOS prepared'}
+              subtitle={
+                run.completed ? 'Every step below actually ran.' : 'Nothing has been sent. Read it, then decide.'
+              }
+            />
+
+            {run.draft && !run.completed ? (
+              <div className="rounded-2xl border border-line bg-surface-soft p-4">
+                <p className="text-xs font-medium uppercase tracking-wide text-ink-faint">Follow-up message</p>
+                <pre className="letter mt-2 max-h-64 overflow-y-auto text-[13px] leading-relaxed text-ink-soft">
+                  {run.draft}
+                </pre>
+                <div className="mt-3 flex flex-wrap gap-2">
+                  <Button size="sm" loading={busy} onClick={onSendFollowUp}>
+                    Approve follow-up
+                  </Button>
+                  <Button size="sm" variant="secondary" onClick={onDismissRun}>
+                    Not yet
+                  </Button>
+                </div>
+              </div>
+            ) : null}
+
+            {run.completed ? (
+              <Button size="sm" variant="ghost" onClick={onDismissRun}>
+                Dismiss
+              </Button>
+            ) : null}
+          </div>
+        ) : null}
+      </div>
+    </Card>
   );
 }
 

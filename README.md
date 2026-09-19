@@ -1,18 +1,47 @@
 # CivicSOS
 
-**Tell CivicSOS what happened. It figures out what you should do next.**
+**Tell CivicSOS what happened. We'll handle the rest.**
 
 Most people know exactly what is wrong on their street. Almost nobody knows which
 department handles it, what evidence that department will ask for, what to write,
 where to send it, how long to wait, or what to do when nothing happens.
 
-CivicSOS closes that gap. You describe the problem in one sentence; it produces a
-complete, dated plan — the responsible authority, the evidence checklist, a
-submission-ready complaint letter, the official channel to use, the date to follow
-up, and the escalation path if you are ignored — and then tracks the case for you.
+CivicSOS closes that gap. It is an **autonomous civic resolution agent**: you
+describe the problem and attach a photo, and it works out who is responsible,
+checks your evidence is sufficient, writes the complaint, submits it once you
+approve, captures the reference, watches for a response, and prepares the
+follow-up and the escalation when nothing happens.
 
-It is not a chatbot. A language model helps read your sentence; a deterministic
-rules engine decides everything that matters.
+It is not a chatbot and not a directory. A language model helps read your
+sentence; a deterministic rules engine and a gated agent do everything that
+matters.
+
+### The agent
+
+```
+you describe it  →  understand  →  route  →  check evidence  →  draft complaint
+                                                                      ↓
+   resolution  ←  escalate  ←  follow up  ←  monitor  ←  capture reference
+                                                                      ↑
+                                            submit  ←  YOU APPROVE  ←──┘
+```
+
+Two guarantees hold at every step, and both are enforced in code rather than
+promised in copy:
+
+1. **Nothing happens without approval.** Every acting step — preparing a
+   submission, submitting, sending a follow-up — is refused by the policy layer
+   unless the request carries the citizen's explicit approval.
+2. **Nothing reaches a real government system.** Submission runs against the
+   CivicSOS demo environment, a pure function with no HTTP client and no URL, so
+   there is no code path by which a demo run could reach a portal. Every
+   reference it issues is prefixed `CS-DEMO-`, every case it touches is stamped
+   `submissionMode: 'SIMULATED'`, and the UI labels it on screen. See
+   [SECURITY.md](SECURITY.md#11-the-agent).
+
+The agent's action set is closed — thirteen named actions, nothing else — and a
+model cannot invent an authority, a channel, a URL, a reference or a successful
+submission, because none of those come from model output.
 
 ---
 
@@ -68,9 +97,9 @@ application code changes. See [ARCHITECTURE.md](ARCHITECTURE.md#extending-the-kn
 | Route | What it is |
 | --- | --- |
 | `/` | Home — the pitch, the categories, community impact |
-| `/report` | **The primary journey.** Describe → plan → complaint → tracked case |
+| `/report` | **The primary journey.** Describe → understand → approve → agent submits → tracked |
 | `/cases` | Dashboard: summary tiles, filters, scannable case rows |
-| `/cases/[id]` | Case detail: progress rail, "what happens next", evidence, history |
+| `/cases/[id]` | Case detail: phase, what the agent did and will do next, evidence, history |
 | `/rewards` | Civic Points balance, citizen level, reward catalogue |
 | `/profile` | Identity, level progress, impact, points activity |
 | `/notifications` | Reminders, escalation windows, points earned |
@@ -256,7 +285,7 @@ curl -X POST http://localhost:3000/api/dev/sweep
 
 ```bash
 npm run verify     # typecheck every workspace, run the test suite, production build
-npm test           # 154 tests: rules, AI fallback, authorization, points, API contract
+npm test           # 173 tests: agent policy, rules, AI fallback, authorization, points
 npm run openapi    # regenerate docs/openapi.json from the live route table
 ```
 
@@ -268,6 +297,11 @@ expired upload grants, escalation attempted too early, the reminder sweep's
 idempotency, and — for the points system — replayed awards, client-supplied
 balances, level gating, insufficient funds, and the guarantee that spending never
 demotes a citizen.
+
+For the agent specifically: submission refused without approval, refused twice on
+the same case, refused on an incomplete complaint, refused on someone else's
+case, refused on a closed case, and the guarantee that every reference it issues
+is marked as simulated in three independent places.
 
 ## Deploy
 

@@ -7,6 +7,7 @@ import { useApi, useAuth } from '@/lib/auth';
 import { URGENCY_LABEL, URGENCY_TONE, formatDate, placeholderLabel } from '@/lib/format';
 import { notifyProfileChanged } from '@/lib/profile-events';
 import type {
+  AgentRunResponse,
   AnalyzeResponse,
   CaseRecord,
   CategoryId,
@@ -14,6 +15,7 @@ import type {
   KnowledgeResponse,
   LocationInput,
 } from '@/lib/types';
+import { AgentExecution, SimulationNotice } from './AgentExecution';
 import { PhotoPicker, type PickedPhoto } from './PhotoPicker';
 import { uploadEvidenceBatch } from '@/lib/evidence-upload';
 import { PlanView } from './PlanView';
@@ -55,7 +57,7 @@ import {
  * mid-flow does not discard what was typed.
  */
 
-type Step = 'describe' | 'plan' | 'created';
+type Step = 'describe' | 'plan' | 'agent' | 'created';
 
 const DRAFT_KEY = 'civicsos.draft';
 const MIN_DESCRIPTION = 12;
@@ -103,6 +105,9 @@ export function ReportFlow({ initialCategory }: { initialCategory?: CategoryId }
    * the existing evidence API once creation succeeds — no new endpoint.
    */
   const [photos, setPhotos] = useState<PickedPhoto[]>([]);
+  const [agentRun, setAgentRun] = useState<AgentRunResponse | undefined>();
+  const [agentRunning, setAgentRunning] = useState(false);
+  const [agentRevealed, setAgentRevealed] = useState(false);
   const [photoUpload, setPhotoUpload] = useState<
     { state: 'idle' } | { state: 'uploading'; done: number; total: number } | { state: 'done'; uploaded: number; failed: number; error?: string }
   >({ state: 'idle' });
@@ -231,13 +236,14 @@ export function ReportFlow({ initialCategory }: { initialCategory?: CategoryId }
       });
       setCreated(result);
       if (result.pointsAwarded > 0) notifyProfileChanged();
-      setStep('created');
+      setStep('agent');
+      setAgentRunning(true);
       window.sessionStorage.removeItem(DRAFT_KEY);
       window.scrollTo({ top: 0, behavior: 'smooth' });
 
-      // Photos go up after the case exists, through the normal evidence flow.
-      // A failure here never invalidates the case — it is reported on the
-      // confirmation screen with a link to retry from the case itself.
+      // Photos go up first, so the agent's evidence check sees them. A failure
+      // here never invalidates the case — it is reported on the confirmation
+      // screen with a pointer to the case's Evidence tab.
       if (photos.length > 0 && result.created) {
         setPhotoUpload({ state: 'uploading', done: 0, total: photos.length });
         const outcome = await uploadEvidenceBatch(
@@ -248,6 +254,27 @@ export function ReportFlow({ initialCategory }: { initialCategory?: CategoryId }
         );
         setPhotoUpload({ state: 'done', uploaded: outcome.uploaded, failed: outcome.failed, error: outcome.firstError });
         if (outcome.uploaded > 0) notifyProfileChanged();
+      }
+
+      // The citizen already approved on the previous screen; that approval is
+      // what this request carries. The server refuses without it.
+      try {
+        const run = await api<AgentRunResponse>(`/cases/${result.case.caseId}/agent/submit`, {
+          method: 'POST',
+          body: { approve: true },
+        });
+        setAgentRun(run);
+      } catch (caught) {
+        // A failed run leaves a perfectly good case behind; say so plainly and
+        // let the citizen submit through the official channel themselves.
+        setError(
+          caught instanceof Error
+            ? caught
+            : new Error('CivicSOS could not complete the submission. Your case is saved.'),
+        );
+        setStep('created');
+      } finally {
+        setAgentRunning(false);
       }
     } catch (caught) {
       setError(caught instanceof Error ? caught : new Error('Something went wrong.'));
@@ -262,13 +289,40 @@ export function ReportFlow({ initialCategory }: { initialCategory?: CategoryId }
     setCreated(undefined);
     setPhotos([]);
     setPhotoUpload({ state: 'idle' });
+    setAgentRun(undefined);
+    setAgentRunning(false);
+    setAgentRevealed(false);
     setTouched(false);
     setStep('describe');
     window.scrollTo({ top: 0 });
   }, []);
 
+  if (step === 'agent' && created) {
+    return (
+      <AgentStep
+        running={agentRunning}
+        run={agentRun}
+        error={error}
+        onRevealed={() => setAgentRevealed(true)}
+        revealed={agentRevealed}
+        onContinue={() => {
+          setStep('created');
+          window.scrollTo({ top: 0, behavior: 'smooth' });
+        }}
+      />
+    );
+  }
+
   if (step === 'created' && created) {
-    return <CreatedStep result={created} onReportAnother={restart} photoUpload={photoUpload} />;
+    return (
+      <CreatedStep
+        result={created}
+        run={agentRun}
+        onReportAnother={restart}
+        photoUpload={photoUpload}
+        error={error}
+      />
+    );
   }
 
   if (step === 'plan' && analysis) {
@@ -298,10 +352,10 @@ export function ReportFlow({ initialCategory }: { initialCategory?: CategoryId }
 
       <div className="space-y-2.5 text-center">
         <h1 className="text-[28px] font-semibold leading-tight tracking-tight text-ink sm:text-[32px]">
-          Let&apos;s solve this together
+          Tell us what happened.
         </h1>
         <p className="text-[15px] leading-relaxed text-ink-muted">
-          Tell us what happened. We&apos;ll figure out what you should do next.
+          No complicated forms. Just describe the problem.
         </p>
       </div>
 
@@ -323,7 +377,7 @@ export function ReportFlow({ initialCategory }: { initialCategory?: CategoryId }
               value={draft.description}
               invalid={touched && tooShort}
               onChange={(event) => update('description', event.target.value)}
-              placeholder="Describe the problem in your own words..."
+              placeholder="Garbage has not been collected outside my apartment for 5 days."
               maxLength={4000}
               autoComplete="off"
             />
@@ -391,7 +445,7 @@ export function ReportFlow({ initialCategory }: { initialCategory?: CategoryId }
           <details className="group rounded-2xl border border-line bg-surface-soft p-4">
             <summary className="flex cursor-pointer list-none items-center gap-2 text-sm font-medium text-ink-soft">
               <IconLocation className="h-4 w-4 text-ink-faint" />
-              Add location
+              Where is this happening?
               <span className="ml-auto text-xs font-normal text-ink-faint">Optional</span>
             </summary>
 
@@ -469,7 +523,7 @@ export function ReportFlow({ initialCategory }: { initialCategory?: CategoryId }
               disabled={sessionLoading}
               trailingIcon={analyzing ? undefined : <IconArrowRight className="h-[18px] w-[18px]" />}
             >
-              {analyzing ? 'Working out what to do…' : 'Help me solve this'}
+              {analyzing ? 'Understanding what happened…' : 'Let CivicSOS handle it'}
             </Button>
           )}
 
@@ -488,8 +542,8 @@ export function ReportFlow({ initialCategory }: { initialCategory?: CategoryId }
 /* ------------------------------------------------------------------ */
 
 /** Three-step progress rail. Orientation, not decoration. */
-function StepRail({ current }: { current: 1 | 2 | 3 }) {
-  const steps = ['Describe', 'Review plan', 'Track it'];
+function StepRail({ current }: { current: 1 | 2 | 3 | 4 }) {
+  const steps = ['Describe', 'Approve', 'We submit', 'Track it'];
   return (
     <ol className="flex items-center justify-center gap-2 text-xs font-medium" aria-label="Progress">
       {steps.map((label, index) => {
@@ -553,6 +607,7 @@ function PlanStep({
   const { analysis: result, meta } = analysis;
   const remaining = findPlaceholders(`${complaintSubject}\n${complaintBody}`);
   const location = [draft.location.locality, draft.location.city].filter(Boolean).join(', ');
+  const canFill = Boolean(draft.name || draft.contact || draft.sinceWhen || location);
 
   return (
     <div className="space-y-6">
@@ -560,9 +615,11 @@ function PlanStep({
 
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <h1 className="text-[26px] font-semibold tracking-tight text-ink sm:text-[30px]">Here&apos;s what we found</h1>
+          <h1 className="text-[26px] font-semibold tracking-tight text-ink sm:text-[30px]">
+            Here&apos;s what I understood
+          </h1>
           <p className="mt-1.5 text-[15px] text-ink-muted">
-            Check this over, then we&apos;ll get you set up to submit it.
+            Check this over. Once you approve, CivicSOS handles the submission.
           </p>
         </div>
         <Button variant="ghost" size="sm" onClick={onBack} icon={<IconArrowLeft className="h-4 w-4" />}>
@@ -627,13 +684,16 @@ function PlanStep({
       ) : null}
 
       <div>
-        <h2 className="mb-4 text-lg font-semibold tracking-tight text-ink">Here&apos;s what to do next</h2>
+        <h2 className="mb-4 text-lg font-semibold tracking-tight text-ink">What happens next</h2>
         <PlanView plan={result.plan} />
       </div>
 
-      {result.missingInformation.length > 0 ? (
+      {remaining.length > 0 || result.missingInformation.length > 0 ? (
         <Card className="p-5 sm:p-6">
-          <SectionHeading title="Add these details" description="These are the things an official would ask you for." />
+          <SectionHeading
+            title="One thing is missing"
+            description="Fill these in and CivicSOS can submit it for you."
+          />
           <ul className="mt-3.5 space-y-2">
             {result.missingInformation.map((item, index) => (
               <li key={index} className="flex gap-2.5 text-sm text-ink-muted">
@@ -662,30 +722,64 @@ function PlanStep({
                 maxLength={120}
               />
             </Field>
+            {/* Location lives here too: without it the complaint keeps a
+                [[LOCATION]] blank that could otherwise only be fixed by
+                hand-editing the letter, which is exactly the friction this
+                product exists to remove. */}
+            <Field label="Where is this happening?" htmlFor="fix-locality" hint="Street plus a nearby landmark.">
+              <Input
+                id="fix-locality"
+                value={draft.location.locality ?? ''}
+                onChange={(event) => onDraftChange('location', { ...draft.location, locality: event.target.value })}
+                autoComplete="street-address"
+                maxLength={160}
+              />
+            </Field>
+            <Field label="City" htmlFor="fix-city">
+              <Input
+                id="fix-city"
+                value={draft.location.city ?? ''}
+                onChange={(event) => onDraftChange('location', { ...draft.location, city: event.target.value })}
+                autoComplete="address-level2"
+                maxLength={80}
+              />
+            </Field>
+            <Field label="How long has it been like this?" htmlFor="fix-since" hint="A date or a rough duration.">
+              <Input
+                id="fix-since"
+                value={draft.sinceWhen}
+                onChange={(event) => onDraftChange('sinceWhen', event.target.value)}
+                maxLength={120}
+              />
+            </Field>
           </div>
 
           <Button
             variant="secondary"
             size="sm"
             className="mt-4"
-            disabled={!draft.name && !draft.contact}
-            onClick={() =>
-              onBodyChange(
-                complaintBody
+            disabled={!canFill}
+            onClick={() => {
+              const place = [draft.location.locality, draft.location.city].filter(Boolean).join(', ');
+              const fill = (text: string) =>
+                text
                   .replaceAll('[[YOUR_NAME]]', draft.name || '[[YOUR_NAME]]')
-                  .replaceAll('[[YOUR_CONTACT]]', draft.contact || '[[YOUR_CONTACT]]'),
-              )
-            }
+                  .replaceAll('[[YOUR_CONTACT]]', draft.contact || '[[YOUR_CONTACT]]')
+                  .replaceAll('[[SINCE_WHEN]]', draft.sinceWhen || '[[SINCE_WHEN]]')
+                  .replaceAll('[[LOCATION]]', place || '[[LOCATION]]');
+              onSubjectChange(fill(complaintSubject));
+              onBodyChange(fill(complaintBody));
+            }}
           >
-            Put these into the complaint
+            Fill these into the complaint
           </Button>
         </Card>
       ) : null}
 
       <Card className="p-5 sm:p-6">
         <SectionHeading
-          title="Your complaint"
-          description="Read it, change anything you like, then copy it into the official channel."
+          title="Your complaint is ready"
+          description="Read it and change anything you like. CivicSOS sends this one."
           aside={
             result.complaint.provenance === 'AI_ASSISTED' ? (
               <Badge tone="accent" icon={<IconSparkle className="h-3.5 w-3.5" />}>
@@ -739,16 +833,19 @@ function PlanStep({
       <div className="sticky bottom-0 -mx-4 border-t border-line bg-surface/95 px-4 py-4 backdrop-blur-md sm:-mx-6 sm:px-6">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <p className="text-xs leading-relaxed text-ink-muted">
-            Creating a case lets CivicSOS track it, remind you when to follow up, and show you how to escalate.
+            {remaining.length > 0
+              ? 'Fill in the blanks above before approving — CivicSOS will not submit an incomplete complaint.'
+              : 'Approving lets CivicSOS submit this for you, capture the reference and keep following it up.'}
           </p>
           <Button
             size="lg"
             loading={creating}
             onClick={onCreate}
+            disabled={remaining.length > 0}
             className="shrink-0"
             trailingIcon={creating ? undefined : <IconArrowRight className="h-[18px] w-[18px]" />}
           >
-            Create my case
+            Approve &amp; submit
           </Button>
         </div>
       </div>
@@ -770,21 +867,81 @@ type PhotoUploadState =
   | { state: 'uploading'; done: number; total: number }
   | { state: 'done'; uploaded: number; failed: number; error?: string };
 
-function CreatedStep({
-  result,
-  onReportAnother,
-  photoUpload,
+function AgentStep({
+  running,
+  run,
+  error,
+  revealed,
+  onRevealed,
+  onContinue,
 }: {
-  result: CreateCaseResponse;
-  onReportAnother: () => void;
-  photoUpload: PhotoUploadState;
+  running: boolean;
+  run?: AgentRunResponse;
+  error?: Error;
+  revealed: boolean;
+  onRevealed: () => void;
+  onContinue: () => void;
 }) {
-  const record: CaseRecord = result.case;
-  const levelUp = result.awards.find((award) => award.levelUp)?.levelUp;
+  const steps = run?.steps ?? [];
 
   return (
     <div className="mx-auto max-w-2xl space-y-6">
       <StepRail current={3} />
+
+      <AgentExecution steps={steps} running={running || steps.length === 0} onRevealed={onRevealed} />
+
+      {error ? (
+        <Alert tone="bad" title="CivicSOS could not finish the submission">
+          <p>{error.message}</p>
+          <p className="mt-1.5">
+            Your case is saved. Open it and use the official channel listed there to submit it yourself.
+          </p>
+          <Button size="sm" className="mt-3" onClick={onContinue}>
+            Continue
+          </Button>
+        </Alert>
+      ) : null}
+
+      {/* The continue action only appears once the citizen has actually seen
+          what the agent did — the point of this screen is the visibility. */}
+      {!running && revealed && run ? (
+        <div className="rise space-y-4">
+          <SimulationNotice />
+          <Button
+            size="lg"
+            full
+            onClick={onContinue}
+            trailingIcon={<IconArrowRight className="h-[18px] w-[18px]" />}
+          >
+            See the result
+          </Button>
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+function CreatedStep({
+  result,
+  run,
+  onReportAnother,
+  photoUpload,
+  error,
+}: {
+  result: CreateCaseResponse;
+  run?: AgentRunResponse;
+  onReportAnother: () => void;
+  photoUpload: PhotoUploadState;
+  error?: Error;
+}) {
+  // The agent's copy of the case is newer than the one creation returned.
+  const record: CaseRecord = run?.case ?? result.case;
+  const levelUp = result.awards.find((award) => award.levelUp)?.levelUp;
+  const submitted = Boolean(run?.completed && run.reference);
+
+  return (
+    <div className="mx-auto max-w-2xl space-y-6">
+      <StepRail current={4} />
 
       <Card className="rise p-6 text-center sm:p-10">
         <div
@@ -794,7 +951,12 @@ function CreatedStep({
           <IconCheck className="h-8 w-8" />
         </div>
 
-        <h1 className="mt-5 text-2xl font-semibold tracking-tight text-ink">Your case is being tracked</h1>
+        <h1 className="mt-5 text-2xl font-semibold tracking-tight text-ink">
+          {submitted ? "You're done." : 'Your case is being tracked'}
+        </h1>
+        {submitted ? (
+          <p className="mt-2 text-[15px] text-ink-soft">Complaint submitted successfully.</p>
+        ) : null}
 
         {/* Points appear as a small, factual line — not a celebration. */}
         {result.pointsAwarded > 0 ? (
@@ -805,17 +967,22 @@ function CreatedStep({
         {levelUp ? <p className="mt-2 text-sm font-medium text-gold">You reached {levelUp}.</p> : null}
 
         <p className="mx-auto mt-4 max-w-lg text-[15px] leading-relaxed text-ink-muted">
-          CivicSOS has not sent anything to any authority — that part is yours to do. What we have done is record the
-          case, work out when you should follow up, and prepare the escalation path if nothing happens.
+          {submitted
+            ? "We'll keep watching this case and tell you the moment it needs you again."
+            : 'CivicSOS has recorded the case, worked out when you should follow up, and prepared the escalation path if nothing happens.'}
         </p>
 
         <dl className="mx-auto mt-6 grid max-w-md gap-3 text-left sm:grid-cols-2">
           <div className="rounded-xl bg-surface-soft p-3.5">
-            <dt className="text-xs font-medium uppercase tracking-wide text-ink-faint">Case reference</dt>
-            <dd className="mt-1 truncate font-mono text-sm text-ink">{record.caseId}</dd>
+            <dt className="text-xs font-medium uppercase tracking-wide text-ink-faint">
+              {submitted ? 'Reference' : 'Case reference'}
+            </dt>
+            <dd className="mt-1 truncate font-mono text-sm text-ink">{run?.reference ?? record.caseId}</dd>
           </div>
           <div className="rounded-xl bg-surface-soft p-3.5">
-            <dt className="text-xs font-medium uppercase tracking-wide text-ink-faint">Follow up around</dt>
+            <dt className="text-xs font-medium uppercase tracking-wide text-ink-faint">
+              {submitted ? 'Next check' : 'Follow up around'}
+            </dt>
             <dd className="mt-1 text-sm font-medium text-ink">
               {record.followUpAt ? formatDate(record.followUpAt) : '—'}
             </dd>
@@ -828,7 +995,7 @@ function CreatedStep({
             size="lg"
             trailingIcon={<IconArrowRight className="h-[18px] w-[18px]" />}
           >
-            Open my case
+            View my case
           </ButtonLink>
           <Button size="lg" variant="secondary" onClick={onReportAnother}>
             Report something else
@@ -862,10 +1029,23 @@ function CreatedStep({
         </Alert>
       ) : null}
 
-      <Alert tone="accent" title="Next step: submit it officially" icon={<IconSend className="h-[18px] w-[18px]" />}>
-        Open your case and use the official channel listed there. When you get a complaint number back, record it on
-        the case — every follow-up and escalation depends on it.
-      </Alert>
+      {error ? (
+        <Alert tone="warn" title="Submission did not complete">
+          <p>{error.message}</p>
+          <p className="mt-1.5">
+            Your case is saved. Open it and use the official channel listed there to submit it yourself.
+          </p>
+        </Alert>
+      ) : null}
+
+      {submitted ? (
+        <SimulationNotice />
+      ) : (
+        <Alert tone="accent" title="Next step: submit it officially" icon={<IconSend className="h-[18px] w-[18px]" />}>
+          Open your case and use the official channel listed there. When you get a complaint number back, record it on
+          the case — every follow-up and escalation depends on it.
+        </Alert>
+      )}
 
       <p className="text-center text-sm text-ink-muted">
         <Link href="/cases" className="font-medium text-accent underline underline-offset-4 hover:text-accent-hover">

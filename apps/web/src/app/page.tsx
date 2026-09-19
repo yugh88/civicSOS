@@ -6,6 +6,7 @@ import { apiFetch } from '@/lib/api';
 import { useAuth } from '@/lib/auth';
 import { CATEGORY_ALT, CATEGORY_BLURB, categoryArt } from '@/lib/category-art';
 import type { KnowledgeResponse } from '@/lib/types';
+import { AgentPreviewCard } from '@/components/AgentExecution';
 import { Badge, ButtonLink, Card, Dot, Skeleton } from '@/components/ui';
 import {
   CategoryIcon,
@@ -46,6 +47,7 @@ export default function HomePage() {
   return (
     <div className="space-y-12 sm:space-y-16">
       <Hero signedIn={Boolean(session)} />
+      <HowItHelps />
       <Categories knowledge={knowledge} />
       <ClosingCta />
     </div>
@@ -61,17 +63,18 @@ function Hero({ signedIn }: { signedIn: boolean }) {
         {/* Copy ------------------------------------------------------- */}
         <div className="max-w-xl">
           <Badge tone="accent" icon={<Dot tone="accent" />}>
-            Cleaner cities. Stronger communities.
+            Autonomous civic resolution
           </Badge>
 
-          <h1 className="mt-5 text-[34px] font-semibold leading-[1.08] tracking-tight text-ink sm:text-[44px]">
-            See a problem?
+          <h1 className="mt-5 text-[32px] font-semibold leading-[1.08] tracking-tight text-ink sm:text-[42px]">
+            Your civic problem.
             <br />
-            <span className="text-accent">Let&apos;s solve it together.</span>
+            <span className="text-accent">Our agent.</span>
           </h1>
 
           <p className="mt-4 max-w-lg text-[15px] leading-relaxed text-ink-muted sm:text-base">
-            Report civic issues in seconds, get guidance, track progress, and help build a better tomorrow.
+            Tell CivicSOS what happened. It figures out where it belongs, prepares the complaint, handles supported
+            submissions, and keeps following up.
           </p>
 
           <div className="mt-7 flex flex-col gap-2.5 sm:flex-row sm:flex-wrap">
@@ -81,7 +84,7 @@ function Hero({ signedIn }: { signedIn: boolean }) {
               className="whitespace-nowrap"
               trailingIcon={<IconArrowRight className="h-[18px] w-[18px]" />}
             >
-              Help me solve a problem
+              Report a problem
             </ButtonLink>
             <ButtonLink
               href={signedIn ? '/cases' : '/signin?demo=1'}
@@ -89,7 +92,7 @@ function Hero({ signedIn }: { signedIn: boolean }) {
               variant="secondary"
               className="whitespace-nowrap"
             >
-              {signedIn ? 'My cases' : 'Try the demo'}
+              {signedIn ? 'View my cases' : 'Try the demo'}
             </ButtonLink>
           </div>
         </div>
@@ -103,7 +106,11 @@ function Hero({ signedIn }: { signedIn: boolean }) {
           className="mx-auto w-full max-w-sm sm:max-w-md lg:max-w-none"
         />
 
-        <ValueCard className="md:col-span-2 lg:col-span-1" />
+        {/* A real demonstration of the agent's states, not invented motion. */}
+        <div className="space-y-4 md:col-span-2 lg:col-span-1">
+          <AgentPreviewCard />
+          <ValueCard />
+        </div>
       </div>
 
       {/* Stats get their own row so the labels never have to truncate. */}
@@ -157,10 +164,10 @@ function ImpactStrip() {
 
 function ValueCard({ className = '' }: { className?: string }) {
   const points = [
-    { text: 'Report local issues in a few clicks', icon: <IconReport className="h-4 w-4" />, tone: 'accent' as const },
-    { text: 'Get guidance and next steps', icon: <IconCheck className="h-4 w-4" />, tone: 'teal' as const },
-    { text: 'Track progress as it happens', icon: <IconClock className="h-4 w-4" />, tone: 'accent' as const },
-    { text: 'Earn points and unlock rewards', icon: <IconStar className="h-4 w-4" />, tone: 'gold' as const },
+    { text: 'Finds the responsible authority', icon: <IconReport className="h-4 w-4" />, tone: 'accent' as const },
+    { text: 'Checks your evidence is enough', icon: <IconCheck className="h-4 w-4" />, tone: 'teal' as const },
+    { text: 'Prepares and submits the complaint', icon: <IconClock className="h-4 w-4" />, tone: 'accent' as const },
+    { text: 'Follows up and escalates for you', icon: <IconStar className="h-4 w-4" />, tone: 'gold' as const },
   ];
 
   const tones = {
@@ -173,7 +180,7 @@ function ValueCard({ className = '' }: { className?: string }) {
     <Card className={`p-5 sm:p-6 ${className}`}>
       <h2 className="flex items-center gap-2 text-[15px] font-semibold text-ink">
         <IconSparkle aria-hidden="true" className="h-[18px] w-[18px] text-teal" />
-        Make a difference today
+        What CivicSOS does for you
       </h2>
 
       <ul className="mt-4 space-y-3">
@@ -187,13 +194,40 @@ function ValueCard({ className = '' }: { className?: string }) {
         ))}
       </ul>
 
-      <blockquote className="mt-5 rounded-xl bg-accent-soft/70 p-4">
-        <p className="text-[13px] leading-relaxed text-ink-soft">
-          &ldquo;A cleaner, safer, brighter community is a happier community.&rdquo;
-        </p>
-        <footer className="mt-1.5 text-xs text-ink-muted">— CivicSOS</footer>
-      </blockquote>
+      <p className="mt-5 rounded-xl bg-accent-soft/70 p-4 text-[13px] leading-relaxed text-ink-soft">
+        You approve every action before it happens. CivicSOS never files anything without you saying so.
+      </p>
     </Card>
+  );
+}
+
+function HowItHelps() {
+  const steps = [
+    { title: 'Tell us', detail: 'Describe the problem and add a photo. No forms, no department names to look up.' },
+    { title: 'We handle it', detail: 'CivicSOS works out the route, prepares the complaint and submits it once you approve.' },
+    { title: 'We follow up', detail: 'It remembers the case, watches for a response and handles the next step.' },
+  ];
+
+  return (
+    <section aria-labelledby="how" className="space-y-5">
+      <h2 id="how" className="text-xl font-semibold tracking-tight text-ink sm:text-2xl">
+        How CivicSOS helps
+      </h2>
+      <ol className="stagger grid gap-3 sm:grid-cols-3">
+        {steps.map((step, index) => (
+          <Card key={step.title} as="li" className="p-5">
+            <span
+              aria-hidden="true"
+              className="flex h-9 w-9 items-center justify-center rounded-xl bg-accent-soft text-[15px] font-bold text-accent"
+            >
+              {index + 1}
+            </span>
+            <h3 className="mt-3.5 text-[15px] font-semibold text-ink">{step.title}</h3>
+            <p className="mt-1.5 text-sm leading-relaxed text-ink-muted">{step.detail}</p>
+          </Card>
+        ))}
+      </ol>
+    </section>
   );
 }
 
@@ -278,7 +312,7 @@ function ClosingCta() {
             Something broken on your street right now?
           </h2>
           <p className="mt-2 text-[15px] leading-relaxed text-ink-soft">
-            It takes one sentence to start. CivicSOS works out the rest and stays with you until it is fixed.
+            One sentence and a photo is all it takes. CivicSOS does the rest and stays with it until it is fixed.
           </p>
         </div>
         <ButtonLink href="/report" size="lg" trailingIcon={<IconArrowRight className="h-[18px] w-[18px]" />}>

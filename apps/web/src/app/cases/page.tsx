@@ -6,7 +6,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useApi, useAuth } from '@/lib/auth';
 import { CATEGORY_ALT, categoryArt } from '@/lib/category-art';
 import { STATUS_TONE, formatDate, formatRelative } from '@/lib/format';
-import type { CaseListResponse, CaseRecord, CaseStatus, MeResponse } from '@/lib/types';
+import type { CaseListResponse, CasePhase, CaseRecord, CaseStatus, MeResponse } from '@/lib/types';
 import {
   Alert,
   Badge,
@@ -33,6 +33,9 @@ import {
   IconRewards,
 } from '@/components/icons';
 
+/** A list row carries the server-derived phase alongside the record. */
+type ListedCase = CaseListResponse['cases'][number];
+
 /**
  * My Cases.
  *
@@ -49,6 +52,18 @@ const STATUS_LABELS: Record<CaseStatus, string> = {
   ESCALATED: 'Escalated',
   RESOLVED: 'Resolved',
   CLOSED_UNRESOLVED: 'Closed',
+};
+
+/** Phase is what the citizen sees; status remains the persisted machine. */
+const PHASE_TONE: Record<CasePhase, 'neutral' | 'accent' | 'teal' | 'good' | 'warn' | 'bad'> = {
+  PREPARING: 'neutral',
+  AWAITING_APPROVAL: 'accent',
+  SUBMITTED: 'accent',
+  MONITORING: 'teal',
+  FOLLOW_UP_READY: 'warn',
+  ESCALATION_READY: 'bad',
+  RESOLVED: 'good',
+  CLOSED: 'neutral',
 };
 
 type FilterId = 'ALL' | 'NEEDS_ACTION' | 'SUBMITTED' | 'RESOLVED';
@@ -88,7 +103,7 @@ export default function CasesPage() {
   const api = useApi();
   const router = useRouter();
 
-  const [cases, setCases] = useState<CaseRecord[]>([]);
+  const [cases, setCases] = useState<ListedCase[]>([]);
   const [me, setMe] = useState<MeResponse | undefined>();
   const [cursor, setCursor] = useState<string | undefined>();
   const [loading, setLoading] = useState(true);
@@ -424,9 +439,11 @@ function SummaryTile({
   );
 }
 
-function CaseRow({ record, pointsEarned }: { record: CaseRecord; pointsEarned?: number }) {
+function CaseRow({ record, pointsEarned }: { record: ListedCase; pointsEarned?: number }) {
   const overdue = isOverdue(record);
   const location = [record.location.locality, record.location.city].filter(Boolean).join(', ');
+  const tone = record.phase ? PHASE_TONE[record.phase] : STATUS_TONE[record.status];
+  const label = record.phaseLabel ?? STATUS_LABELS[record.status];
 
   return (
     <Card as="li" interactive className="group list-none overflow-hidden">
@@ -443,14 +460,18 @@ function CaseRow({ record, pointsEarned }: { record: CaseRecord; pointsEarned?: 
 
         <span className="min-w-0 flex-1 py-3 pr-2 sm:py-3.5">
           <span className="flex flex-wrap items-center gap-1.5">
-            <Badge tone={STATUS_TONE[record.status]} icon={<Dot tone={STATUS_TONE[record.status]} />}>
-              {STATUS_LABELS[record.status]}
+            <Badge tone={tone} icon={<Dot tone={tone} />}>
+              {label}
             </Badge>
             {record.isDemo ? <DemoBadge /> : null}
             {record.urgency === 'CRITICAL' ? <Badge tone="bad">Urgent</Badge> : null}
           </span>
 
           <span className="mt-1.5 block text-sm font-semibold leading-snug text-ink">{record.summary}</span>
+
+          {record.phaseMessage ? (
+            <span className="mt-1 block text-xs leading-relaxed text-ink-muted">{record.phaseMessage}</span>
+          ) : null}
 
           <span className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-ink-muted sm:text-xs">
             <span className="inline-flex items-center gap-1">
