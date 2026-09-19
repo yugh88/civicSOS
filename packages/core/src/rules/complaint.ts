@@ -45,11 +45,31 @@ const TOKEN_RE = /\[\[([A-Z_]+)\]\]/g;
 /** Tokens the citizen is expected to complete themselves, by design. */
 const USER_SUPPLIED_TOKENS = new Set(['YOUR_NAME', 'YOUR_CONTACT']);
 
+/**
+ * Tokens that are genuinely optional, with what to write when there is nothing
+ * to write.
+ *
+ * Without this, a citizen with no water connection number is stuck: the letter
+ * says "where applicable" but the unfilled token still counts as a blank and
+ * blocks submission. An optional field must degrade into a sentence, not into a
+ * dead end.
+ */
+const OPTIONAL_TOKEN_FALLBACKS: Record<string, string> = {
+  CONSUMER_NUMBER: 'not applicable',
+  HOUSEHOLDS_AFFECTED: 'not recorded',
+};
+
 function fill(template: string, values: Record<string, string | undefined>): { text: string; unresolved: string[] } {
   const unresolved = new Set<string>();
   const text = template.replace(TOKEN_RE, (match, token: string) => {
     const value = values[token];
     if (value && value.trim().length > 0) return value;
+
+    // An optional token resolves to a neutral phrase rather than staying a
+    // blank the citizen cannot clear.
+    const fallback = OPTIONAL_TOKEN_FALLBACKS[token];
+    if (fallback) return fallback;
+
     unresolved.add(token);
     return match;
   });

@@ -12,6 +12,7 @@ import { AppError } from '../domain/errors.js';
 import { isSafeId } from '../domain/ids.js';
 import { zodIssues } from './responses.js';
 import {
+  agentPrepareRequestSchema,
   agentRunRequestSchema,
   analyzeRequestSchema,
   createCaseRequestSchema,
@@ -213,6 +214,16 @@ export function buildRoutes(ctx: ServiceContext): RouteDefinition[] {
         const result = await agent.submit(context.auth, caseIdOf(context), request);
         const phase = casePhase(result.case, ctx.clock.now());
         return { ...result, phase, phaseLabel: PHASE_LABELS[phase], phaseMessage: PHASE_MESSAGES[phase] };
+      },
+    },
+
+    {
+      method: 'POST',
+      pattern: '/cases/:caseId/agent/prepare-official',
+      summary: 'Prepare a complaint payload for a verified official channel. Submits nothing.',
+      handler: async (context) => {
+        const request = parse(agentPrepareRequestSchema, context.body);
+        return agent.prepareOfficial(context.auth, caseIdOf(context), request);
       },
     },
 

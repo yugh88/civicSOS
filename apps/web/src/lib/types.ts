@@ -34,7 +34,14 @@ export type {
   UserProfile,
 } from '@civicsos/core';
 
-import type { AnalysisResult, CaseEvent, CaseRecord, CaseStatus, ResolutionPlan } from '@civicsos/core';
+import type {
+  AnalysisResult,
+  CaseEvent,
+  CaseRecord,
+  CaseStatus,
+  ResolutionPlan,
+  SubmissionChannel,
+} from '@civicsos/core';
 
 export interface AnalyzeResponse {
   analysis: AnalysisResult;
@@ -222,6 +229,33 @@ export interface AgentRunResponse extends PhaseFields {
   case: CaseRecord;
   /** Present on a follow-up run: the exact message that would be sent. */
   draft?: string;
+}
+
+export interface PayloadField {
+  key: string;
+  label: string;
+  value: string;
+  multiline?: boolean;
+}
+
+export interface SubmissionPayload {
+  caseId: string;
+  categoryId: string;
+  categoryLabel: string;
+  fields: PayloadField[];
+  evidence: Array<{ evidenceId: string; label: string; contentType: string; downloadUrl: string }>;
+}
+
+export interface PreparedSubmission {
+  provider: 'DEMO' | 'OFFICIAL' | 'ASSIST';
+  channel: SubmissionChannel;
+  authorityName: string;
+  /** False when only a generic template was available. */
+  channelVerified: boolean;
+  payload: SubmissionPayload;
+  steps: AgentStep[];
+  /** What CivicSOS will and will not do next. Rendered verbatim. */
+  boundaries: string[];
 }
 
 export interface CreateCaseResponse {

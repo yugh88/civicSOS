@@ -137,7 +137,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const points = me?.profile.civicPoints ?? 0;
 
   return (
-    <div className="flex min-h-dvh flex-col bg-surface">
+    <div className="flex min-h-dvh flex-col bg-page">
       <a
         href="#main"
         className="sr-only-focusable absolute left-4 top-4 z-50 rounded-lg bg-accent px-4 py-2 text-sm font-medium text-white"
@@ -145,7 +145,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         Skip to content
       </a>
 
-      <header className="sticky top-0 z-40 border-b border-line bg-surface/90 backdrop-blur-md">
+      <header className="sticky top-0 z-40 border-b border-line bg-nav/90 backdrop-blur-md">
         <div className="mx-auto flex h-16 w-full max-w-6xl items-center gap-3 px-4 sm:px-6">
           {/* Mobile menu trigger sits first so the logo stays centred-ish. */}
           <button
@@ -153,7 +153,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             aria-expanded={menuOpen}
             aria-controls="mobile-nav"
             onClick={() => setMenuOpen((open) => !open)}
-            className="-ml-2 rounded-xl p-2 text-ink-soft transition-colors hover:bg-surface-sunken md:hidden"
+            className="-ml-2 rounded-xl p-2 text-ink-soft transition-colors hover:bg-surface md:hidden"
           >
             <span className="sr-only">{menuOpen ? 'Close menu' : 'Open menu'}</span>
             {menuOpen ? <IconClose className="h-5 w-5" /> : <IconMenu className="h-5 w-5" />}
@@ -178,7 +178,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                   href={item.href}
                   aria-current={active ? 'page' : undefined}
                   className={`rounded-xl px-3 py-2 text-sm font-medium transition-colors duration-150 ${
-                    active ? 'bg-accent-soft text-accent-ink' : 'text-ink-soft hover:bg-surface-sunken hover:text-ink'
+                    active ? 'bg-accent-soft text-accent' : 'text-ink-soft hover:bg-surface hover:text-ink'
                   }`}
                 >
                   {item.label}
@@ -210,7 +210,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                       setBellOpen((open) => !open);
                       setProfileOpen(false);
                     }}
-                    className="relative rounded-xl p-2.5 text-ink-soft transition-colors hover:bg-surface-sunken"
+                    className="relative rounded-xl p-2.5 text-ink-soft transition-colors hover:bg-surface"
                   >
                     <span className="sr-only">
                       Notifications{unread > 0 ? `, ${unread} unread` : ''}
@@ -307,7 +307,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 
         {/* Mobile navigation sheet. Same items, same order, larger targets. */}
         {menuOpen ? (
-          <nav id="mobile-nav" aria-label="Main" className="rise border-t border-line bg-surface px-3 py-2 md:hidden">
+          <nav id="mobile-nav" aria-label="Main" className="rise border-t border-line bg-nav px-3 py-2 md:hidden">
             <ul className="space-y-0.5">
               {NAV.map((item) => {
                 const active = isActive(pathname, item.href);
@@ -317,7 +317,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                       href={item.href}
                       aria-current={active ? 'page' : undefined}
                       className={`flex items-center gap-3 rounded-xl px-3 py-3 text-sm font-medium ${
-                        active ? 'bg-accent-soft text-accent-ink' : 'text-ink-soft'
+                        active ? 'bg-accent-soft text-accent' : 'text-ink-soft'
                       }`}
                     >
                       <item.icon className="h-5 w-5" />
@@ -467,7 +467,7 @@ export function notificationTone(kind: string) {
 
 function Footer() {
   return (
-    <footer className="border-t border-line bg-surface-soft">
+    <footer className="border-t border-line bg-nav">
       <div className="mx-auto max-w-6xl px-4 py-9 sm:px-6">
         <div className="flex flex-wrap items-start justify-between gap-6">
           <div className="max-w-3xl">

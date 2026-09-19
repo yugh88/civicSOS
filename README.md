@@ -32,12 +32,19 @@ promised in copy:
 1. **Nothing happens without approval.** Every acting step — preparing a
    submission, submitting, sending a follow-up — is refused by the policy layer
    unless the request carries the citizen's explicit approval.
-2. **Nothing reaches a real government system.** Submission runs against the
-   CivicSOS demo environment, a pure function with no HTTP client and no URL, so
-   there is no code path by which a demo run could reach a portal. Every
-   reference it issues is prefixed `CS-DEMO-`, every case it touches is stamped
-   `submissionMode: 'SIMULATED'`, and the UI labels it on screen. See
-   [SECURITY.md](SECURITY.md#11-the-agent).
+2. **Nothing is claimed that did not happen.** There are two submission paths and
+   they are never blurred:
+
+   - **Demo Simulation** runs against the CivicSOS demo environment — a pure
+     function with no HTTP client and no URL, so no demo run can reach a portal.
+     Every reference is prefixed `CS-DEMO-`, every case is stamped
+     `submissionMode: 'SIMULATED'`, and the UI says so on screen.
+   - **Official Website** opens a *verified* official channel with the complaint
+     prepared. CivicSOS stops before the final Submit; the citizen presses it,
+     and the case is only marked submitted once they record the reference the
+     authority gave them.
+
+   See [SECURITY.md](SECURITY.md#11-the-agent).
 
 The agent's action set is closed — thirteen named actions, nothing else — and a
 model cannot invent an authority, a channel, a URL, a reference or a successful
@@ -285,7 +292,7 @@ curl -X POST http://localhost:3000/api/dev/sweep
 
 ```bash
 npm run verify     # typecheck every workspace, run the test suite, production build
-npm test           # 173 tests: agent policy, rules, AI fallback, authorization, points
+npm test           # 183 tests: agent policy, providers, rules, AI fallback, auth, points
 npm run openapi    # regenerate docs/openapi.json from the live route table
 ```
 
@@ -323,6 +330,8 @@ packages/core/     Domain, validation, civic knowledge, rules engine, AI pipelin
 packages/aws/      Adapters for the core's ports (DynamoDB, S3, EventBridge,
                    Cognito, SSM) plus the three Lambda entry points.
 packages/infra/    AWS CDK stack.
+apps/extension/    Optional browser assistant: fills supported fields on verified
+                   official portals. Never submits, never handles a login.
 apps/web/          Next.js 15 app, and the local in-memory API for development.
 scripts/           OpenAPI generation.
 docs/              Generated OpenAPI document.

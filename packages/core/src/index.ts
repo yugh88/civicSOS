@@ -116,6 +116,17 @@ export { EvidenceService, MAX_EVIDENCE_PER_CASE, type EvidenceView } from './ser
 export { ReminderService, type ReminderSweepResult } from './services/reminder-service.js';
 export { AdminService, type AdminOverview } from './services/admin-service.js';
 export { AgentService, type AgentRunRequest } from './services/agent-service.js';
+export {
+  OFFICIAL_BOUNDARIES,
+  PROVIDER_INFO,
+  SUBMISSION_PROVIDERS,
+  buildPayload,
+  resolveOfficialChannel,
+  type PayloadField,
+  type PreparedSubmission,
+  type SubmissionPayload,
+  type SubmissionProviderId,
+} from './submission/providers.js';
 export { PointsService, type AwardResult } from './services/points-service.js';
 export { RewardsService, type RewardView, type RewardsOverview } from './services/rewards-service.js';
 export { createAuditWriter, type AuditWriter } from './services/audit.js';

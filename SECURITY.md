@@ -392,6 +392,45 @@ than by convention.
 **Everything it did is on the timeline**, attributed to `agent` rather than to
 the citizen, so the record of who did what stays honest.
 
+### The official hand-off and the browser assistant
+
+The second submission path prepares a complaint for a **verified** official
+channel and hands it to the citizen. It is deliberately the *less* automated
+path, and the limits are enforced rather than promised:
+
+- **It never submits.** `prepareOfficial` writes no submission state: the case
+  keeps `submittedAt: undefined` and is only marked submitted when the citizen
+  records the reference the authority actually gave them. A test asserts this.
+- **It refuses an unverified destination.** Only a channel already marked
+  verified in the knowledge layer with a real URL is offered. A generic template
+  is never dressed up as an official destination.
+- **The payload carries no credentials.** There is no credential field in the
+  type, and a test greps the serialised payload for `password`, `otp`,
+  `captcha`, `token`, `secret` and `credential`.
+
+The browser assistant (`apps/extension`) exists because a web page cannot touch
+another origin's DOM — which is the protection that stops any site filling your
+bank form. It is scoped accordingly:
+
+- **It fills only fields in a verified mapping for that exact origin.** The
+  mapping registry ships **empty**: writing selectors for a portal nobody has
+  inspected would be inventing them, and a wrong selector typing a complaint
+  into the wrong box is worse than no autofill. With no mapping it shows a
+  review panel with copy buttons, which works anywhere.
+- **It refuses credential fields structurally.** `isCredentialField` rejects
+  password inputs, `one-time-code` autocomplete, and anything named like an OTP,
+  CAPTCHA, PIN or CVV — even if a mapping mistakenly pointed at one.
+- **It waits rather than acting** when a login or challenge is on screen. There
+  is no code that attempts either.
+- **It never clicks Submit.** The submit selector is recorded in the mapping
+  precisely so it can be excluded.
+- **Nothing is persisted.** The service worker holds a hand-off in memory for at
+  most five minutes, delivers it once to a tab whose origin matches, and drops
+  it. `externally_connectable` restricts which origins may reach it at all.
+
+The extension is optional. Without it the official path still works — the web
+app shows the prepared complaint with copy buttons.
+
 ### What this does not cover
 
 A deployment that gains a genuine machine-to-machine submission channel replaces

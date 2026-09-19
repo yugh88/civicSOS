@@ -6,8 +6,7 @@ import { apiFetch } from '@/lib/api';
 import { useAuth } from '@/lib/auth';
 import { CATEGORY_ALT, CATEGORY_BLURB, categoryArt } from '@/lib/category-art';
 import type { KnowledgeResponse } from '@/lib/types';
-import { AgentPreviewCard } from '@/components/AgentExecution';
-import { Badge, ButtonLink, Card, Dot, Skeleton } from '@/components/ui';
+import { ButtonLink, Card, Skeleton } from '@/components/ui';
 import {
   CategoryIcon,
   IconArrowRight,
@@ -62,11 +61,7 @@ function Hero({ signedIn }: { signedIn: boolean }) {
       <div className="rise grid items-center gap-8 md:grid-cols-2 lg:grid-cols-[1.35fr_1fr_0.9fr] lg:gap-8">
         {/* Copy ------------------------------------------------------- */}
         <div className="max-w-xl">
-          <Badge tone="accent" icon={<Dot tone="accent" />}>
-            Autonomous civic resolution
-          </Badge>
-
-          <h1 className="mt-5 text-[32px] font-semibold leading-[1.08] tracking-tight text-ink sm:text-[42px]">
+          <h1 className="text-[32px] font-semibold leading-[1.08] tracking-tight text-ink sm:text-[42px]">
             Your civic problem.
             <br />
             <span className="text-accent">Our agent.</span>
@@ -106,11 +101,7 @@ function Hero({ signedIn }: { signedIn: boolean }) {
           className="mx-auto w-full max-w-sm sm:max-w-md lg:max-w-none"
         />
 
-        {/* A real demonstration of the agent's states, not invented motion. */}
-        <div className="space-y-4 md:col-span-2 lg:col-span-1">
-          <AgentPreviewCard />
-          <ValueCard />
-        </div>
+        <ValueCard className="md:col-span-2 lg:col-span-1" />
       </div>
 
       {/* Stats get their own row so the labels never have to truncate. */}

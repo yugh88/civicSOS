@@ -1,0 +1,15 @@
+{
+  "name": "@civicsos/extension",
+  "version": "1.0.0",
+  "private": true,
+  "description": "CivicSOS browser assistant — fills supported fields on verified official complaint portals.",
+  "scripts": {
+    "build": "node build.mjs",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "devDependencies": {
+    "@types/chrome": "^0.0.280",
+    "esbuild": "^0.24.2",
+    "typescript": "^5.6.3"
+  }
+}

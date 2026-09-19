@@ -20,6 +20,13 @@ import { assessEscalation, computeFollowUpDate, nextEscalationStep } from '../ru
 import { remainingPlaceholders } from '../rules/complaint.js';
 import { isoNow } from '../util/time.js';
 import { PointsService } from './points-service.js';
+import {
+  OFFICIAL_BOUNDARIES,
+  buildPayload,
+  resolveOfficialChannel,
+  type PreparedSubmission,
+  type SubmissionProviderId,
+} from '../submission/providers.js';
 
 /**
  * The agent.
@@ -287,6 +294,110 @@ export class AgentService {
       simulated: true,
       case: saved,
       draft,
+    };
+  }
+
+  /**
+   * Prepares a hand-off to a verified official channel.
+   *
+   * This is the real-world path, and it is deliberately the *less* automated
+   * one. CivicSOS builds the payload and opens the door; the citizen walks
+   * through it. Nothing here submits, and nothing here marks the case
+   * submitted — only the citizen recording the reference the authority gave
+   * them does that, through the existing `POST /cases/:id/submitted`.
+   */
+  async prepareOfficial(
+    auth: AuthContext,
+    caseId: string,
+    request: AgentRunRequest & { provider?: SubmissionProviderId },
+  ): Promise<PreparedSubmission> {
+    const record = assertCanWriteCase(auth, await this.ctx.repository.getCase(caseId));
+    const now = this.ctx.clock.now();
+
+    // The same approval gate as the demo path. Preparing a payload that
+    // contains the citizen's complaint is an action taken on their behalf.
+    const context: ActionContext = {
+      record,
+      confirmedEvidence: 0,
+      approved: request.approve === true,
+      now,
+    };
+    const gate = checkAction('prepare_submission', context);
+    if (!gate.allowed) {
+      await this.ctx.audit.record({
+        auth,
+        action: 'AGENT_PREPARE_OFFICIAL',
+        resource: `case/${caseId}`,
+        outcome: 'DENY',
+        detail: gate.reason,
+      });
+      throw AppError.conflict(gate.reason ?? 'That is not available right now.');
+    }
+
+    // Refuses outright when the category has no verified online channel,
+    // rather than sending someone to a generic template.
+    const { channel, authorityName } = resolveOfficialChannel(record);
+
+    const evidence = await this.ctx.repository.listEvidence(caseId);
+    const confirmed = evidence.filter((item) => item.confirmed);
+    const downloadUrls = new Map<string, string>();
+    for (const item of confirmed) {
+      downloadUrls.set(
+        item.evidenceId,
+        await this.ctx.storage.createDownloadUrl({
+          storageKey: item.storageKey,
+          expiresInSeconds: this.ctx.config.signedUrlTtlSeconds,
+        }),
+      );
+    }
+
+    const payload = buildPayload(record, confirmed, downloadUrls);
+    const provider: SubmissionProviderId = request.provider === 'ASSIST' ? 'ASSIST' : 'OFFICIAL';
+
+    const steps: AgentStep[] = [
+      agentStep('resolve_jurisdiction', describeJurisdiction(record), 'OK', now),
+      agentStep('find_official_channel', `${channel.label} — a verified official channel.`, 'OK', now),
+      agentStep(
+        'generate_complaint',
+        `${payload.fields.length} fields prepared${payload.evidence.length > 0 ? ` and ${payload.evidence.length} attachment(s) ready` : ''}.`,
+        'OK',
+        now,
+      ),
+      agentStep(
+        'prepare_submission',
+        'Ready to hand off. CivicSOS stops before the final Submit — you press that.',
+        'OK',
+        now,
+      ),
+      // Named explicitly so the boundary is visible in the run, not only in copy.
+      agentStep('submit_complaint', 'Not performed. Only you can submit on an official site.', 'SKIPPED', now),
+    ];
+
+    await this.ctx.repository.appendEvent({
+      caseId,
+      eventId: newCaseEventId(now),
+      type: 'NOTE_ADDED',
+      message: `CivicSOS prepared this complaint for ${channel.label}. Nothing has been submitted yet.`,
+      actor: 'agent',
+      createdAt: isoNow(now),
+    });
+
+    await this.ctx.audit.record({
+      auth,
+      action: 'AGENT_PREPARE_OFFICIAL',
+      resource: `case/${caseId}`,
+      outcome: 'ALLOW',
+      detail: `provider=${provider} channel=${channel.label}`,
+    });
+
+    return {
+      provider,
+      channel,
+      authorityName,
+      channelVerified: !channel.isSample,
+      payload,
+      steps,
+      boundaries: OFFICIAL_BOUNDARIES,
     };
   }
 

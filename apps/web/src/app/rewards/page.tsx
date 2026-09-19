@@ -303,11 +303,14 @@ function RewardCard({
   const locked = !reward.affordable || !reward.eligible;
 
   return (
-    <Card as="li" className="flex list-none flex-col p-5">
+    <Card
+      as="li"
+      className="group flex list-none flex-col p-5 transition-[box-shadow,transform,border-color] duration-200 hover:-translate-y-0.5 hover:border-accent-line hover:shadow-lift"
+    >
       <div className="flex items-start justify-between gap-3">
         <span
           aria-hidden="true"
-          className="flex h-11 w-11 items-center justify-center rounded-xl bg-surface-sunken text-xl"
+          className="flex h-11 w-11 items-center justify-center rounded-xl bg-surface-sunken text-xl transition-[transform,background-color] duration-200 group-hover:scale-105 group-hover:bg-accent-soft"
         >
           {reward.emoji}
         </span>
@@ -334,8 +337,13 @@ function RewardCard({
         </Button>
       </div>
 
-      {/* Explain the lock rather than leaving a dead control. */}
-      {reward.lockedReason ? <p className="mt-2 text-xs text-ink-muted">{reward.lockedReason}</p> : null}
+      {/* Explain the lock rather than leaving a dead control. The reason is
+          always rendered for assistive tech; hover just brings it forward. */}
+      {reward.lockedReason ? (
+        <p className="mt-2 text-xs text-ink-faint transition-colors duration-200 group-hover:text-ink-muted">
+          {reward.lockedReason}
+        </p>
+      ) : null}
     </Card>
   );
 }

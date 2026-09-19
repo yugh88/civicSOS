@@ -133,6 +133,12 @@ export const agentRunRequestSchema = z.object({
   approve: z.boolean().optional(),
 });
 
+/** Official hand-off: the same approval gate, plus which surface will fill it. */
+export const agentPrepareRequestSchema = z.object({
+  approve: z.boolean().optional(),
+  provider: z.enum(['OFFICIAL', 'ASSIST']).optional(),
+});
+
 export const profileUpdateRequestSchema = z.object({
   displayName: line(120).optional(),
   defaultLocation: locationSchema.optional(),
@@ -148,4 +154,5 @@ export type MarkSubmittedRequest = z.infer<typeof markSubmittedRequestSchema>;
 export type EvidenceUploadRequest = z.infer<typeof evidenceUploadRequestSchema>;
 export type ProfileUpdateRequest = z.infer<typeof profileUpdateRequestSchema>;
 export type AgentRunRequestInput = z.infer<typeof agentRunRequestSchema>;
+export type AgentPrepareRequestInput = z.infer<typeof agentPrepareRequestSchema>;
 export { ALLOWED_EVIDENCE_TYPES };

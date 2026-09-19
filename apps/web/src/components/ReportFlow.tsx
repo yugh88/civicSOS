@@ -16,6 +16,7 @@ import type {
   LocationInput,
 } from '@/lib/types';
 import { AgentExecution, SimulationNotice } from './AgentExecution';
+import { SubmissionChoice } from './SubmissionChoice';
 import { PhotoPicker, type PickedPhoto } from './PhotoPicker';
 import { uploadEvidenceBatch } from '@/lib/evidence-upload';
 import { PlanView } from './PlanView';
@@ -237,7 +238,6 @@ export function ReportFlow({ initialCategory }: { initialCategory?: CategoryId }
       setCreated(result);
       if (result.pointsAwarded > 0) notifyProfileChanged();
       setStep('agent');
-      setAgentRunning(true);
       window.sessionStorage.removeItem(DRAFT_KEY);
       window.scrollTo({ top: 0, behavior: 'smooth' });
 
@@ -256,26 +256,10 @@ export function ReportFlow({ initialCategory }: { initialCategory?: CategoryId }
         if (outcome.uploaded > 0) notifyProfileChanged();
       }
 
-      // The citizen already approved on the previous screen; that approval is
-      // what this request carries. The server refuses without it.
-      try {
-        const run = await api<AgentRunResponse>(`/cases/${result.case.caseId}/agent/submit`, {
-          method: 'POST',
-          body: { approve: true },
-        });
-        setAgentRun(run);
-      } catch (caught) {
-        // A failed run leaves a perfectly good case behind; say so plainly and
-        // let the citizen submit through the official channel themselves.
-        setError(
-          caught instanceof Error
-            ? caught
-            : new Error('CivicSOS could not complete the submission. Your case is saved.'),
-        );
-        setStep('created');
-      } finally {
-        setAgentRunning(false);
-      }
+      // The case exists and the complaint is approved. How it goes out is the
+      // citizen's choice — a simulation they can watch, or the real official
+      // channel — so the flow stops here rather than picking for them.
+      setAgentRunning(false);
     } catch (caught) {
       setError(caught instanceof Error ? caught : new Error('Something went wrong.'));
     } finally {
@@ -300,11 +284,32 @@ export function ReportFlow({ initialCategory }: { initialCategory?: CategoryId }
   if (step === 'agent' && created) {
     return (
       <AgentStep
+        caseId={created.case.caseId}
         running={agentRunning}
         run={agentRun}
         error={error}
         onRevealed={() => setAgentRevealed(true)}
         revealed={agentRevealed}
+        onRunDemo={async () => {
+          setAgentRunning(true);
+          setError(undefined);
+          try {
+            const run = await api<AgentRunResponse>(`/cases/${created.case.caseId}/agent/submit`, {
+              method: 'POST',
+              body: { approve: true },
+            });
+            setAgentRun(run);
+          } catch (caught) {
+            // A failed run leaves a perfectly good case behind.
+            setError(
+              caught instanceof Error
+                ? caught
+                : new Error('CivicSOS could not complete the submission. Your case is saved.'),
+            );
+          } finally {
+            setAgentRunning(false);
+          }
+        }}
         onContinue={() => {
           setStep('created');
           window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -868,21 +873,56 @@ type PhotoUploadState =
   | { state: 'done'; uploaded: number; failed: number; error?: string };
 
 function AgentStep({
+  caseId,
   running,
   run,
   error,
   revealed,
   onRevealed,
+  onRunDemo,
   onContinue,
 }: {
+  caseId: string;
   running: boolean;
   run?: AgentRunResponse;
   error?: Error;
   revealed: boolean;
   onRevealed: () => void;
+  onRunDemo: () => void;
   onContinue: () => void;
 }) {
   const steps = run?.steps ?? [];
+
+  // Before a choice is made, offer both paths. They are genuinely different
+  // things, so neither is the default.
+  if (!run && !running) {
+    return (
+      <div className="mx-auto max-w-3xl space-y-6">
+        <StepRail current={3} />
+
+        <div className="space-y-2 text-center">
+          <h1 className="text-[26px] font-semibold tracking-tight text-ink sm:text-[30px]">
+            Your complaint is ready
+          </h1>
+          <p className="text-[15px] text-ink-muted">How would you like it submitted?</p>
+        </div>
+
+        {error ? (
+          <Alert tone="bad" title="That did not work">
+            {error.message}
+          </Alert>
+        ) : null}
+
+        <SubmissionChoice caseId={caseId} onDemo={onRunDemo} demoBusy={running} />
+
+        <p className="text-center">
+          <Button variant="ghost" size="sm" onClick={onContinue}>
+            Skip for now — just track the case
+          </Button>
+        </p>
+      </div>
+    );
+  }
 
   return (
     <div className="mx-auto max-w-2xl space-y-6">

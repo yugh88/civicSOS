@@ -295,3 +295,156 @@ describe('no real-world side effects', () => {
     expect(result.json.reference.startsWith('CS-DEMO-')).toBe(true);
   });
 });
+
+describe('official channel hand-off', () => {
+  let harness: TestHarness;
+  beforeEach(() => {
+    harness = createHarness();
+  });
+
+  it('requires approval, exactly like the demo path', async () => {
+    const caseId = await createCase(harness);
+    const result = await harness.call('POST', `/cases/${caseId}/agent/prepare-official`, {
+      user: ALICE,
+      body: {},
+    });
+    expect(result.status).toBe(409);
+    expect(result.json.error.message).toMatch(/approval/i);
+  });
+
+  it('prepares a payload for a verified official channel only', async () => {
+    const caseId = await createCase(harness);
+    const result = await harness.call('POST', `/cases/${caseId}/agent/prepare-official`, {
+      user: ALICE,
+      body: { approve: true, provider: 'ASSIST' },
+    });
+
+    expect(result.status).toBe(200);
+    expect(result.json.channelVerified).toBe(true);
+    expect(result.json.channel.isSample).toBe(false);
+    expect(result.json.channel.url).toMatch(/^https:\/\//);
+    expect(result.json.provider).toBe('ASSIST');
+  });
+
+  it('builds the payload only from what the citizen already wrote', async () => {
+    const caseId = await createCase(harness);
+    const result = await harness.call('POST', `/cases/${caseId}/agent/prepare-official`, {
+      user: ALICE,
+      body: { approve: true },
+    });
+
+    const keys = result.json.payload.fields.map((field: any) => field.key);
+    expect(keys).toContain('subject');
+    expect(keys).toContain('description');
+    expect(keys).toContain('location');
+
+    // Nothing resembling a credential may ever appear in a hand-off payload.
+    const serialised = JSON.stringify(result.json.payload).toLowerCase();
+    for (const forbidden of ['password', 'otp', 'captcha', 'token', 'secret', 'credential']) {
+      expect(serialised, forbidden).not.toContain(forbidden);
+    }
+  });
+
+  it('never claims the complaint was submitted', async () => {
+    const caseId = await createCase(harness);
+    await harness.call('POST', `/cases/${caseId}/agent/prepare-official`, {
+      user: ALICE,
+      body: { approve: true },
+    });
+
+    // Preparing is not submitting: the case must be untouched.
+    const detail = await harness.call('GET', `/cases/${caseId}`, { user: ALICE });
+    expect(detail.json.case.submittedAt).toBeUndefined();
+    expect(detail.json.case.officialReference).toBeUndefined();
+    expect(detail.json.case.submissionMode).toBeUndefined();
+    expect(detail.json.phase).toBe('AWAITING_APPROVAL');
+  });
+
+  it('marks the submit step as not performed', async () => {
+    const caseId = await createCase(harness);
+    const result = await harness.call('POST', `/cases/${caseId}/agent/prepare-official`, {
+      user: ALICE,
+      body: { approve: true },
+    });
+
+    const submitStep = result.json.steps.find((step: any) => step.action === 'submit_complaint');
+    expect(submitStep.status).toBe('SKIPPED');
+    expect(submitStep.detail).toMatch(/Only you can submit/i);
+  });
+
+  it('states the login and final-submit boundaries with the payload', async () => {
+    const caseId = await createCase(harness);
+    const result = await harness.call('POST', `/cases/${caseId}/agent/prepare-official`, {
+      user: ALICE,
+      body: { approve: true },
+    });
+
+    const boundaries = result.json.boundaries.join(' ');
+    expect(boundaries).toMatch(/stops before the final Submit/i);
+    expect(boundaries).toMatch(/never handles those, and never stores any credential/i);
+    expect(boundaries).toMatch(/CAPTCHA/);
+  });
+
+  it('only ever hands off to a verified channel with a real URL', async () => {
+    // Every category has at least one genuinely official destination, because
+    // CPGRAMS is a real Government of India portal and the knowledge layer
+    // lists it as a fallback for all of them. The guarantee that matters is
+    // that a *generic template* is never offered as an official destination.
+    const categories = [
+      ['GARBAGE_SANITATION', 'Garbage has not been collected outside my apartment for 5 days.'],
+      ['ROAD_DAMAGE', 'A large pothole has opened at the junction near our street.'],
+      ['STREETLIGHT', 'The street light on our lane has not worked for three weeks.'],
+      ['WATER_SEWERAGE', 'No water supply in our building since yesterday morning.'],
+    ] as const;
+
+    for (const [categoryId, description] of categories) {
+      const created = await harness.call('POST', '/cases', {
+        user: ALICE,
+        body: completeCaseBody({
+          categoryId,
+          description,
+          idempotencyKey: `official-${categoryId.toLowerCase()}`,
+          facts: {
+            sinceWhen: 'for 5 days',
+            householdsAffected: '15 flats',
+            reporterName: 'Alice Fernandes',
+            reporterContact: 'alice@example.invalid',
+          },
+        }),
+      });
+
+      const result = await harness.call('POST', `/cases/${created.json.case.caseId}/agent/prepare-official`, {
+        user: ALICE,
+        body: { approve: true },
+      });
+
+      expect(result.status, categoryId).toBe(200);
+      expect(result.json.channel.isSample, categoryId).toBe(false);
+      expect(result.json.channel.url, categoryId).toMatch(/^https:\/\/[^ ]+\.(gov\.in|org)\//);
+    }
+  });
+
+  it("refuses on another citizen's case", async () => {
+    const caseId = await createCase(harness);
+    const result = await harness.call('POST', `/cases/${caseId}/agent/prepare-official`, {
+      user: BOB,
+      body: { approve: true },
+    });
+    expect(result.status).toBe(404);
+  });
+
+  it('leaves the demo provider completely unchanged', async () => {
+    const caseId = await createCase(harness);
+    // Preparing an official hand-off must not disturb the demo path.
+    await harness.call('POST', `/cases/${caseId}/agent/prepare-official`, { user: ALICE, body: { approve: true } });
+
+    const demo = await harness.call('POST', `/cases/${caseId}/agent/submit`, {
+      user: ALICE,
+      body: { approve: true },
+    });
+    expect(demo.status).toBe(200);
+    expect(demo.json.simulated).toBe(true);
+    expect(demo.json.reference).toMatch(/^CS-DEMO-\d{5}$/);
+    expect(demo.json.case.submissionMode).toBe('SIMULATED');
+  });
+});

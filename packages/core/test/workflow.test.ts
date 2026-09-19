@@ -296,6 +296,21 @@ describe('complaint drafting', () => {
     expect(draft.body).toMatch(/Yours faithfully/);
   });
 
+  it('resolves genuinely optional tokens instead of leaving a dead blank', () => {
+    // The water template mentions a consumer number "where applicable". A
+    // citizen without one must still be able to submit.
+    const draft = buildComplaintDraft({
+      categoryId: 'WATER_SEWERAGE',
+      description: 'Muddy water from the tap.',
+      location: { locality: 'Anand Nagar', city: 'Ahmedabad' },
+      sinceWhen: 'for two days',
+      reporterName: 'Alice',
+      reporterContact: 'alice@example.invalid',
+    });
+    expect(draft.placeholders).toEqual([]);
+    expect(draft.body).toContain('not applicable');
+  });
+
   it('detects placeholders left in user-edited text', () => {
     expect(remainingPlaceholders('Hello [[YOUR_NAME]] at [[LOCATION]]')).toEqual(['LOCATION', 'YOUR_NAME']);
     expect(remainingPlaceholders('All filled in.')).toEqual([]);

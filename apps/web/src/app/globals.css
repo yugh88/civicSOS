@@ -7,47 +7,49 @@
  * once, in a hurry, on a borrowed phone. One predictable appearance is worth more
  * than a theme switcher.
  *
- * The palette is restrained on purpose — a white page, two barely-there surface
- * tints, one indigo accent that carries every primary action, and colour used
- * only where it means something: teal for progress, amber for rewards, red for
- * genuine urgency. Nothing is coloured for decoration.
+ * The palette is restrained on purpose — an off-white page, white cards, a light
+ * grey navigation band, and one blue accent that carries every primary action.
+ * Colour appears only where it means something: green for success, amber for
+ * attention, red for genuine urgency. Nothing is coloured for decoration.
  *
  * Tailwind v4 generates utilities straight from these tokens, so `bg-accent`,
  * `text-ink-muted` and `border-line` exist without any config file.
  */
 @theme {
   /* Text ------------------------------------------------------------- */
-  --color-ink: #0f172a;
-  --color-ink-soft: #334155;
+  --color-ink: #172033;
+  --color-ink-soft: #3d4a5c;
   --color-ink-muted: #64748b;
   --color-ink-faint: #94a3b8;
 
-  /* Surfaces --------------------------------------------------------- */
+  /* Surfaces. The page is off-white; cards are white and sit on it. --- */
+  --color-page: #f7f8fa;
   --color-surface: #ffffff;
-  --color-surface-soft: #f8fafc;
-  --color-surface-sunken: #f1f5f9;
-  --color-line: #e8edf3;
-  --color-line-strong: #d6dee8;
+  --color-surface-soft: #f7f8fa;
+  --color-surface-sunken: #f1f3f5;
+  --color-nav: #f1f3f5;
+  --color-line: #e2e6eb;
+  --color-line-strong: #d3d9e0;
 
-  /* Primary: indigo. Every primary action, and nothing else. ---------- */
-  --color-accent: #4f46e5;
-  --color-accent-hover: #4338ca;
-  --color-accent-press: #3730a3;
-  --color-accent-soft: #eef2ff;
-  --color-accent-line: #c7d2fe;
-  --color-accent-ink: #3730a3;
+  /* Primary: blue. Every primary action, and nothing else. ------------ */
+  --color-accent: #2563eb;
+  --color-accent-hover: #1d4ed8;
+  --color-accent-press: #1e40af;
+  --color-accent-soft: #eff6ff;
+  --color-accent-line: #bfdbfe;
+  --color-accent-ink: #1d4ed8;
 
-  /* Secondary: teal. Progress, resolution, positive movement. --------- */
-  --color-teal: #0d9488;
-  --color-teal-soft: #f0fdfa;
-  --color-teal-line: #99f6e4;
+  /* Secondary: a cooler blue for progress, distinct from the primary. - */
+  --color-teal: #0369a1;
+  --color-teal-soft: #f0f9ff;
+  --color-teal-line: #bae6fd;
 
   /* Success ---------------------------------------------------------- */
-  --color-good: #047857;
-  --color-good-soft: #ecfdf5;
-  --color-good-line: #a7f3d0;
+  --color-good: #15803d;
+  --color-good-soft: #f0fdf4;
+  --color-good-line: #bbf7d0;
 
-  /* Rewards / attention. Restrained — never a whole card. ------------- */
+  /* Attention: points and rewards. Restrained — never a whole card. --- */
   --color-gold: #b45309;
   --color-gold-soft: #fffbeb;
   --color-gold-line: #fde68a;
@@ -69,8 +71,8 @@
   --radius-card: 1rem;
 
   /* Two shadows only: resting and lifted. More would be noise. -------- */
-  --shadow-card: 0 1px 2px rgba(15, 23, 42, 0.04), 0 1px 3px rgba(15, 23, 42, 0.03);
-  --shadow-lift: 0 4px 12px rgba(15, 23, 42, 0.07), 0 2px 4px rgba(15, 23, 42, 0.04);
+  --shadow-card: 0 1px 2px rgba(23, 32, 51, 0.04), 0 1px 3px rgba(23, 32, 51, 0.03);
+  --shadow-lift: 0 6px 16px rgba(23, 32, 51, 0.08), 0 2px 5px rgba(23, 32, 51, 0.04);
 }
 
 /* Light rendering, always. No dark mode anywhere in this product. */
@@ -84,7 +86,8 @@ html {
 }
 
 body {
-  background-color: var(--color-surface);
+  /* Off-white page; cards are the white surfaces that sit on it. */
+  background-color: var(--color-page);
   color: var(--color-ink);
   font-family: var(--font-sans);
   -webkit-font-smoothing: antialiased;
@@ -196,12 +199,12 @@ body {
   font-variant-ligatures: none;
 }
 
-/* The one gradient in the product: the home hero. Used once, deliberately. */
+/*
+ * The hero band. A flat tint rather than a gradient: the brief asks for a calm,
+ * trustworthy surface, and a wash reads as decoration here.
+ */
 .hero-wash {
-  background:
-    radial-gradient(60rem 30rem at 15% -10%, var(--color-accent-soft) 0%, transparent 60%),
-    radial-gradient(45rem 28rem at 95% 0%, var(--color-teal-soft) 0%, transparent 55%),
-    var(--color-surface);
+  background-color: var(--color-accent-soft);
 }
 
 /* Hides scrollbars on the horizontal filter rails without disabling scrolling. */
