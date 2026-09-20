@@ -22,23 +22,15 @@ import { clearHandoff, HANDOFF_PARAM, readHandoff } from '@/lib/practice-handoff
  * mirrored in `packages/core/src/status-check/targets.ts` and
  * `apps/extension/src/mappings.ts`, and both builds fail if one drifts.
  *
+ * There is no sign-in step: the portal treats every visitor as signed in so the
+ * complaint lands in the form the moment the page opens.
+ *
  * What it will not do, which is the point of practising against it:
  *  - it never submits anywhere; the Submit button produces a local fake number
- *  - the assistant stops at the sign-in gate and resumes only after the citizen
- *    clears it themselves
- *  - the assistant never touches the CAPTCHA, and never presses Submit
+ *  - the assistant never touches the CAPTCHA — that sits in front of Submit,
+ *    where a real portal puts it, and only the citizen can clear it
+ *  - the assistant never presses Submit
  */
-
-/**
- * The portal's own session, so "already signed in" is a state that can exist.
- *
- * localStorage rather than sessionStorage: the portal opens in a new tab every
- * time, and sessionStorage is per-tab — a session established in one tab would
- * be invisible in the next, so the signed-in path could never be reached. A
- * real portal keeps this in a cookie, which is shared across tabs the same way.
- */
-const SESSION_KEY = 'civicsos:practice-portal:signed-in';
-const CHALLENGE_KEY = 'civicsos:practice-portal:verified';
 
 /** Ids the assistant fills. Changing one is a breaking change — see above. */
 const FIELD_IDS = {
@@ -53,10 +45,7 @@ const FIELD_IDS = {
 
 type FieldKey = keyof typeof FIELD_IDS;
 
-type AssistPhase =
-  | { kind: 'IDLE' }
-  | { kind: 'WAITING'; reason: string }
-  | { kind: 'FILLED'; count: number; skipped: string[] };
+type AssistPhase = { kind: 'IDLE' } | { kind: 'FILLED'; count: number; skipped: string[] };
 
 const NAV = [
   { label: 'Dashboard', badge: undefined },
@@ -79,56 +68,10 @@ function PracticePortal() {
   const params = useSearchParams();
   const handoffId = params.get(HANDOFF_PARAM) ?? undefined;
 
-  /*
-   * The portal remembers a signed-in session for the tab.
-   *
-   * Without this the gate reappears on every visit and "the citizen is already
-   * signed in" — the ordinary case on a real portal, and the one where autofill
-   * should simply happen — could never be reached or tested.
-   */
-  const [signedIn, setSignedIn] = useState(false);
+  /** Cleared by the citizen, never by CivicSOS. Gates Submit, not the form. */
   const [challengeSolved, setChallengeSolved] = useState(false);
-  const [sessionLoaded, setSessionLoaded] = useState(false);
   const [submitted, setSubmitted] = useState<string | undefined>();
-
-  useEffect(() => {
-    try {
-      setSignedIn(localStorage.getItem(SESSION_KEY) === 'true');
-      setChallengeSolved(localStorage.getItem(CHALLENGE_KEY) === 'true');
-    } catch {
-      // Private windows throw; the gates simply show, which is the safe default.
-    }
-    setSessionLoaded(true);
-  }, []);
-
-  const signIn = useCallback(() => {
-    setSignedIn(true);
-    try {
-      localStorage.setItem(SESSION_KEY, 'true');
-    } catch {
-      /* not worth failing the click over */
-    }
-  }, []);
-
-  const solveChallenge = useCallback(() => {
-    setChallengeSolved(true);
-    try {
-      localStorage.setItem(CHALLENGE_KEY, 'true');
-    } catch {
-      /* not worth failing the click over */
-    }
-  }, []);
-
-  const signOut = useCallback(() => {
-    setSignedIn(false);
-    setChallengeSolved(false);
-    try {
-      localStorage.removeItem(SESSION_KEY);
-      localStorage.removeItem(CHALLENGE_KEY);
-    } catch {
-      /* nothing to undo */
-    }
-  }, []);
+  const solveChallenge = useCallback(() => setChallengeSolved(true), []);
 
   const [values, setValues] = useState<Record<FieldKey, string>>({
     category: '',
@@ -151,26 +94,15 @@ function PracticePortal() {
     if (found) setPayload(found);
   }, [handoffId]);
 
-  const gate = useMemo<string | undefined>(() => {
-    if (!signedIn) return 'Sign in on this portal and CivicSOS will carry on filling.';
-    if (!challengeSolved) return 'Complete the verification below and CivicSOS will carry on filling.';
-    return undefined;
-  }, [signedIn, challengeSolved]);
-
   /**
-   * Fills the form from the case.
+   * Fills the form from the case, as soon as the hand-off arrives.
    *
-   * Re-runs whenever a gate clears, which is what makes "sign in, then resume"
-   * work: the payload is held, nothing is typed while a gate is up, and the
-   * moment the citizen clears it themselves the fields populate.
+   * Nothing gates this. The CAPTCHA below sits in front of Submit rather than
+   * in front of the form, which is where a real portal puts it and which keeps
+   * the thing CivicSOS refuses to do — solving it — clearly visible.
    */
   useEffect(() => {
-    if (!payload || filledOnce.current || !sessionLoaded) return;
-
-    if (gate) {
-      setPhase({ kind: 'WAITING', reason: gate });
-      return;
-    }
+    if (!payload || filledOnce.current) return;
 
     const next = { ...values };
     const skipped: string[] = [];
@@ -192,13 +124,11 @@ function PracticePortal() {
     if (handoffId) clearHandoff(handoffId);
     // `values` is intentionally not a dependency: this runs once per hand-off.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [payload, gate, handoffId, sessionLoaded]);
+  }, [payload, handoffId]);
 
   const set = useCallback((key: FieldKey, value: string) => {
     setValues((prev) => ({ ...prev, [key]: value }));
   }, []);
-
-  const formDisabled = !signedIn || !challengeSolved;
 
   return (
     <div className="-mx-4 -my-8 min-h-screen bg-[#eef1f5] sm:-mx-6 sm:-my-10">
@@ -256,19 +186,7 @@ function PracticePortal() {
         <aside className="h-fit rounded border border-line bg-white">
           <div className="border-b border-line bg-[#f6f8fa] px-4 py-3">
             <p className="text-[11px] font-semibold uppercase tracking-wide text-ink-muted">Citizen dashboard</p>
-            <p className="mt-1 text-sm font-semibold text-ink">{signedIn ? 'Demo Visitor' : 'Guest'}</p>
-            {signedIn ? (
-              <button
-                type="button"
-                onClick={signOut}
-                // The session persists per tab, so both halves of the flow can
-                // be demonstrated: arriving already signed in, and arriving at
-                // a gate. Without a way back there is only ever one of them.
-                className="mt-1.5 text-xs font-medium text-accent underline underline-offset-2 hover:text-accent-hover"
-              >
-                Sign out of the practice portal
-              </button>
-            ) : null}
+            <p className="mt-1 text-sm font-semibold text-ink">Demo Visitor</p>
           </div>
           <ul className="p-2">
             {NAV.map((item) => (
@@ -300,49 +218,7 @@ function PracticePortal() {
             </div>
 
             <div className="space-y-5 p-5">
-              {/* Sign-in gate — the assistant waits here rather than acting. */}
-              {!signedIn ? (
-                <div id="portal-signin" className="rounded border border-accent-line bg-accent-soft p-4">
-                  <h2 className="text-sm font-bold text-[#1f3a63]">Sign in to lodge a grievance</h2>
-                  <p className="mt-1.5 text-[13px] leading-relaxed text-ink-soft">
-                    A real portal asks for your credentials here. This one asks for nothing — press the button.
-                    CivicSOS never fills, reads or stores anything on a sign-in screen, and will wait until you have
-                    finished.
-                  </p>
-                  <button
-                    type="button"
-                    onClick={signIn}
-                    className="mt-3 rounded bg-[#1f3a63] px-5 py-2 text-[13px] font-semibold text-white transition-opacity hover:opacity-90"
-                  >
-                    Sign in
-                  </button>
-                </div>
-              ) : null}
-
-              {/* Challenge gate — same behaviour, and never solved by CivicSOS. */}
-              {signedIn && !challengeSolved ? (
-                <div id="portal-challenge" className="rounded border border-warn-line bg-warn-soft p-4">
-                  <h2 className="text-sm font-bold text-ink">Verification</h2>
-                  <p className="mt-1.5 text-[13px] leading-relaxed text-ink-soft">
-                    Stands in for a CAPTCHA or an OTP. CivicSOS never solves or bypasses either — it has no code that
-                    could, and it waits for you here.
-                  </p>
-                  <div className="mt-3 flex flex-wrap items-center gap-3">
-                    <span className="select-none rounded border border-line-strong bg-white px-4 py-2 font-mono text-base tracking-[0.35em] text-ink-muted line-through decoration-line-strong">
-                      7Q4KD
-                    </span>
-                    <button
-                      type="button"
-                      onClick={solveChallenge}
-                      className="rounded bg-[#1f3a63] px-5 py-2 text-[13px] font-semibold text-white transition-opacity hover:opacity-90"
-                    >
-                      I have verified
-                    </button>
-                  </div>
-                </div>
-              ) : null}
-
-              <fieldset disabled={formDisabled} className="transition-opacity disabled:opacity-40">
+              <fieldset>
                 <legend className="sr-only">Grievance details</legend>
 
                 <div className="grid gap-4 sm:grid-cols-2">
@@ -413,17 +289,49 @@ function PracticePortal() {
                   </p>
                 </div>
 
-                {/* The control the assistant is written never to press. */}
-                <div className="mt-5 flex flex-wrap items-center gap-3 border-t border-line pt-5">
-                  <button
-                    id="portal-submit"
-                    type="button"
-                    onClick={() => setSubmitted(`PRACTICE-${Math.floor(Math.random() * 90000) + 10000}`)}
-                    className="rounded bg-[#1f3a63] px-6 py-2.5 text-[13px] font-semibold text-white transition-opacity hover:opacity-90"
-                  >
-                    Submit grievance
-                  </button>
-                  <p className="text-xs text-ink-muted">CivicSOS stops before this button, every time. You press it.</p>
+                {/*
+                  Verification, then Submit — both the citizen's, neither ever
+                  CivicSOS's. Keeping them together in front of the one
+                  irreversible control is where a real portal puts them, and it
+                  is the clearest place to show what the assistant refuses.
+                */}
+                <div className="mt-5 border-t border-line pt-5">
+                  {!challengeSolved ? (
+                    <div id="portal-challenge" className="rounded border border-warn-line bg-warn-soft p-4">
+                      <h2 className="text-sm font-bold text-ink">Verification required before submitting</h2>
+                      <p className="mt-1.5 text-[13px] leading-relaxed text-ink-soft">
+                        Stands in for a CAPTCHA or an OTP. CivicSOS never solves or bypasses either — it has no code
+                        that could. Only you can clear this.
+                      </p>
+                      <div className="mt-3 flex flex-wrap items-center gap-3">
+                        <span className="select-none rounded border border-line-strong bg-white px-4 py-2 font-mono text-base tracking-[0.35em] text-ink-muted line-through decoration-line-strong">
+                          7Q4KD
+                        </span>
+                        <button
+                          type="button"
+                          onClick={solveChallenge}
+                          className="rounded bg-[#1f3a63] px-5 py-2 text-[13px] font-semibold text-white transition-opacity hover:opacity-90"
+                        >
+                          I have verified
+                        </button>
+                      </div>
+                    </div>
+                  ) : null}
+
+                  <div className="mt-4 flex flex-wrap items-center gap-3">
+                    <button
+                      id="portal-submit"
+                      type="button"
+                      disabled={!challengeSolved}
+                      onClick={() => setSubmitted(`PRACTICE-${Math.floor(Math.random() * 90000) + 10000}`)}
+                      className="rounded bg-[#1f3a63] px-6 py-2.5 text-[13px] font-semibold text-white transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-40"
+                    >
+                      Submit grievance
+                    </button>
+                    <p className="text-xs text-ink-muted">
+                      CivicSOS stops before this button, every time. You press it.
+                    </p>
+                  </div>
                 </div>
               </fieldset>
 
@@ -472,16 +380,14 @@ function AssistPanel({ phase, payload }: { phase: AssistPhase; payload?: Submiss
         <p className="text-[13px] font-semibold text-ink">
           {phase.kind === 'FILLED'
             ? `Filled ${phase.count} field${phase.count === 1 ? '' : 's'} from your case.`
-            : phase.kind === 'WAITING'
-              ? phase.reason
-              : 'Preparing…'}
+            : 'Preparing…'}
         </p>
       </div>
 
       <p className="mt-2 text-xs leading-relaxed text-ink-soft">
         {phase.kind === 'FILLED'
-          ? 'Check every field before you submit. CivicSOS has stopped — it does not press Submit, and this practice portal reaches no authority.'
-          : 'CivicSOS is holding your complaint and will fill the supported fields once you have cleared this step yourself. It never fills a sign-in form and never solves a CAPTCHA.'}
+          ? 'Check every field before you submit. CivicSOS has stopped here — it does not solve the verification below and it does not press Submit. This practice portal reaches no authority.'
+          : 'Carrying your complaint across…'}
       </p>
 
       {phase.kind === 'FILLED' && phase.skipped.length > 0 ? (

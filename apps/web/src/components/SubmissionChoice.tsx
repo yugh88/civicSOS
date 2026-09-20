@@ -360,8 +360,8 @@ function OfficialHandoff({
         <h3 className="text-[15px] font-semibold text-ink">See what the assistant does first</h3>
         <p className="mt-1.5 text-sm leading-relaxed text-ink-muted">
           CivicSOS includes a practice grievance portal of its own. Open it and the assistant carries this complaint
-          across: it waits at the sign-in step, waits again at the CAPTCHA, fills the supported fields once you have
-          cleared both yourself, and leaves Submit alone. It is not a government website and it sends nothing anywhere.
+          straight into the form. The verification step in front of Submit stays for you — CivicSOS never solves one —
+          and it leaves Submit alone. It is not a government website and it sends nothing anywhere.
         </p>
 
         <div className="mt-4 flex flex-wrap items-center gap-3">

@@ -85,7 +85,9 @@ const PRACTICE_PORTAL: PortalMapping = {
     pincode: '#complaint-pincode',
     description: '#complaint-description',
   },
-  loggedOutSelector: '#portal-signin',
+  // No `loggedOutSelector`: the practice portal has no sign-in step, so there
+  // is no logged-out state to detect. A real portal that has one keeps it here,
+  // and the assistant waits on it exactly as it waits on the challenge below.
   challengeSelector: '#portal-challenge',
   submitSelector: '#portal-submit',
 };
