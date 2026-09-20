@@ -1,0 +1,23 @@
+{
+  "name": "@civicsos/worker",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "On-demand Fargate task that reads a public complaint status page and reports what it saw.",
+  "scripts": {
+    "build": "node build.mjs",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "docker:build": "docker build -f apps/worker/Dockerfile -t civicsos-worker ../..",
+    "check:local": "node dist/index.js",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@aws-sdk/client-eventbridge": "^3.687.0",
+    "playwright": "1.49.1"
+  },
+  "devDependencies": {
+    "@types/node": "^22.20.3",
+    "typescript": "^5.6.3",
+    "vitest": "^2.1.8"
+  }
+}

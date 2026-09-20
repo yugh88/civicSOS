@@ -55,6 +55,22 @@ export {
   remainingPlaceholders,
 } from './rules/complaint.js';
 export { assessEscalation, computeFollowUpDate, nextEscalationDate, nextEscalationStep } from './rules/followup.js';
+export {
+  applyStatusCheck,
+  daysSinceStatusCheck,
+  isConclusive,
+  shouldCheckStatus,
+  statusCheckTargetFor,
+  MAX_CHECKS_PER_SWEEP,
+  MIN_CHECK_INTERVAL_HOURS,
+  type StatusCheckApplication,
+} from './rules/status-check.js';
+export {
+  classifyStatusText,
+  getStatusCheckTarget,
+  STATUS_CHECK_TARGETS,
+  type StatusCheckTarget,
+} from './status-check/targets.js';
 export { assembleAnalysis, buildCasePlan, buildResolutionPlan } from './rules/resolution.js';
 export { STATUS_HINTS, STATUS_LABELS, assertTransition, canTransition, isOpen } from './rules/status.js';
 export {
@@ -114,6 +130,7 @@ export {
 export { CaseService, type CaseDetail } from './services/case-service.js';
 export { EvidenceService, MAX_EVIDENCE_PER_CASE, type EvidenceView } from './services/evidence-service.js';
 export { ReminderService, type ReminderSweepResult } from './services/reminder-service.js';
+export { StatusCheckService, type StatusSweepResult } from './services/status-check-service.js';
 export { AdminService, type AdminOverview } from './services/admin-service.js';
 export { AgentService, type AgentRunRequest } from './services/agent-service.js';
 export {

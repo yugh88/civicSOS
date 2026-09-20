@@ -1,0 +1,27 @@
+# Docker build context for apps/worker/Dockerfile, which builds from the repo
+# root so the bundle can reach packages/core and the practice-portal page.
+#
+# cdk.out matters more than it looks: CDK stages the image context into
+# packages/infra/cdk.out, so without excluding it the staging copy recurses into
+# its own output until the filesystem refuses the path length.
+cdk.out
+**/cdk.out
+
+node_modules
+**/node_modules
+
+dist
+**/dist
+.next
+**/.next
+
+.git
+.github
+*.log
+.env*
+!.env.example
+
+# Nothing the worker needs: it drives a browser, it does not serve the app.
+apps/extension
+docs
+*.md

@@ -432,6 +432,44 @@ bank form. It is scoped accordingly:
   is no code that attempts either.
 - **It never clicks Submit.** The submit selector is recorded in the mapping
   precisely so it can be excluded.
+### The status-check worker
+
+The only server-side browser in CivicSOS, and scoped so that being the least
+predictable component makes it the least privileged one.
+
+- **Its IAM task role permits exactly one action**: `events:PutEvents` on the
+  CivicSOS bus. No DynamoDB, no S3, no API credential, no secret. It cannot
+  change a case; it can only describe what it saw.
+- **It cannot be pointed at a new site.** It accepts a `targetId` from the
+  verified registry, never a URL, so nothing upstream — including a malformed
+  event — can redirect it.
+- **It types one value**: the citizen's own complaint reference. There is no
+  code path that fills a second field, and a test asserts the trace.
+- **It presses the lookup control and nothing else.** The registry has no notion
+  of a submit button, so there is none to press. A status lookup is a read: it
+  creates no record at the authority, which is precisely why this is the job a
+  server-side browser is permitted to do at all. Filing would need a government
+  login, a CAPTCHA and a Submit click, and CivicSOS refuses all three.
+- **It stops at a gate.** A login wall or challenge — on load *or* appearing
+  after the lookup — produces `NEEDS_HUMAN` and nothing else. Tested both ways.
+- **It carries no session.** A fresh, storage-less browser context per check;
+  nothing persists between runs, so there is nothing here that could become a
+  credential.
+- **It does not name the case owner.** A result carries no `ownerId`; the
+  service reads that from the stored record, so a malformed result cannot drop
+  one citizen's case into another's notifications.
+- **Classification is deterministic, not a model.** Matching happens only
+  against each target's recorded vocabulary, with negation handled explicitly:
+  "has not been resolved" must never read as resolved. An unrecognised page is
+  `UNREADABLE`, never optimistically in-progress.
+- **An observation cannot close a case.** The only transition it can cause is
+  `SUBMITTED → AWAITING_RESPONSE`. "The portal says closed" and "the problem is
+  fixed" are different claims, and only the citizen can make the second.
+- **It identifies itself.** An honest User-Agent, a 2-second gap between page
+  loads, 25 checks per sweep and one check per case per 20 hours. A tool that
+  disguised its traffic would be a tool that had decided the site operator does
+  not get to say no.
+
 - **Nothing is persisted.** The service worker holds a hand-off in memory for at
   most five minutes, delivers it once to a tab whose origin — and, for the
   practice portal, whose path — matches, and drops it. `externally_connectable`

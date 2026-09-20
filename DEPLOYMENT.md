@@ -376,6 +376,29 @@ are retained rather than destroyed on stack deletion.
 
 ---
 
+### Optional: the status-check worker
+
+Deployed only with `-c enableWorker=true`, because it is the one component that
+needs Docker running locally to build its image, and the one that creates a VPC.
+
+| Resource | Notes |
+| --- | --- |
+| VPC (2 public subnets, 2 AZs) | **`natGateways: 0`** — a NAT gateway would be ~$32/month before any traffic |
+| Security group | Egress only; nothing inbound |
+| ECS cluster | Free. Fargate bills only while a task runs |
+| Fargate task definition | 0.5 vCPU / 1 GB, x86_64, one-shot |
+| ECR repository (CDK assets) | Holds the Playwright image, ~2 GB |
+| CloudWatch log group | `/aws/ecs/<prefix>-status-check`, 7-day retention |
+
+```bash
+# Requires Docker to be running.
+npm run cdk -- deploy CivicSos-dev -c enableWorker=true
+```
+
+Leaving the flag off changes nothing about an existing deployment: the scheduler
+detects that the worker environment variables are absent and skips the status
+sweep entirely, so reminders and escalation behave exactly as before.
+
 ## 10. Rollback
 
 ### Roll back the backend

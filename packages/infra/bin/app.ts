@@ -57,9 +57,19 @@ const edge = new EdgeStack(app, `CivicSos-${stage}-edge`, {
  */
 const enableEdge = app.node.tryGetContext('enableEdge') !== 'false';
 
+/**
+ * The containerised status-check worker is opt-in.
+ *
+ * It needs Docker running locally to build the image, and it is the only thing
+ * in the stack that creates a VPC. Deploy with `-c enableWorker=true` when you
+ * want it; leaving it off changes nothing about an existing deployment.
+ */
+const enableWorker = app.node.tryGetContext('enableWorker') === 'true';
+
 const stack = new CivicSosStack(app, `CivicSos-${stage}`, {
   webAclArn: enableEdge ? edge.webAclArn : undefined,
   enableEdge,
+  enableWorker,
   crossRegionReferences: true,
   stage,
   allowedOrigins,

@@ -49,6 +49,8 @@ export const CASE_EVENT_TYPES = [
   'REMINDER_SENT',
   'ESCALATION_SUGGESTED',
   'ESCALATED',
+  /** The browser worker read (or failed to read) the authority's status page. */
+  'STATUS_CHECKED',
   'RESOLVED',
   'NOTE_ADDED',
 ] as const;
@@ -223,6 +225,56 @@ export interface SubmissionChannel {
   note?: string;
 }
 
+/**
+ * What the browser worker saw on an authority's public status page.
+ *
+ * The worker reports an observation and nothing more — it never decides what a
+ * case's status becomes. That decision is deterministic and lives in
+ * `rules/status-check.ts`, for the same reason the language model does not get
+ * to set case status: an observer that can also act is an observer whose
+ * mistakes are indistinguishable from decisions.
+ */
+export const STATUS_CHECK_OUTCOMES = [
+  /** The portal says the complaint is closed, resolved or completed. */
+  'RESOLVED',
+  /** The portal shows it as open, assigned, under process — anything alive. */
+  'IN_PROGRESS',
+  /** The portal does not recognise the reference. */
+  'NOT_FOUND',
+  /**
+   * A login wall, CAPTCHA or OTP stands between the worker and the answer.
+   * The worker stops here every time. It has no code that could do otherwise.
+   */
+  'NEEDS_HUMAN',
+  /** The page changed shape, timed out, or otherwise could not be read. */
+  'UNREADABLE',
+] as const;
+
+export type StatusCheckOutcome = (typeof STATUS_CHECK_OUTCOMES)[number];
+
+/** A request for the worker to look at one case's public status page. */
+export interface StatusCheckRequest {
+  caseId: string;
+  ownerId: string;
+  /** Registry key of the verified status page to read. Never a raw URL. */
+  targetId: string;
+  /** The reference the citizen recorded. The only thing typed into the page. */
+  officialReference: string;
+}
+
+/** What comes back. Deliberately small, and carries no scraped prose. */
+export interface StatusCheckResult {
+  caseId: string;
+  targetId: string;
+  outcome: StatusCheckOutcome;
+  /**
+   * A short label lifted from the page, for the citizen to read verbatim.
+   * Capped and sanitized: a status page is untrusted input like any other.
+   */
+  observedLabel?: string;
+  checkedAt: string;
+}
+
 export interface AuthorityRecord {
   authorityId: string;
   name: string;
@@ -306,6 +358,16 @@ export interface CaseRecord {
   submissionMode?: 'SIMULATED' | 'MANUAL';
   submittedAt?: string;
   followUpAt?: string;
+  /**
+   * The last time the browser worker looked at the authority's public status
+   * page for this case, and what it saw.
+   *
+   * Recorded even when the answer was "I could not tell", because a citizen
+   * deciding whether to chase a complaint needs to know the difference between
+   * "nothing has changed" and "nobody has checked".
+   */
+  lastStatusCheckAt?: string;
+  lastStatusCheckOutcome?: StatusCheckOutcome;
   resolvedAt?: string;
   resolutionNote?: string;
   escalationLevel: number;
@@ -347,7 +409,16 @@ export interface NotificationRecord {
   notificationId: string;
   userId: string;
   caseId: string;
-  kind: 'FOLLOW_UP_DUE' | 'ESCALATION_AVAILABLE' | 'CASE_CREATED' | 'POINTS_EARNED' | 'REWARD_AVAILABLE';
+  kind:
+    | 'FOLLOW_UP_DUE'
+    | 'ESCALATION_AVAILABLE'
+    | 'CASE_CREATED'
+    | 'POINTS_EARNED'
+    | 'REWARD_AVAILABLE'
+    /** A status check moved the case forward. */
+    | 'STATUS_CHANGED'
+    /** A status check found something only the citizen can act on. */
+    | 'NEEDS_ATTENTION';
   title: string;
   body: string;
   read: boolean;

@@ -246,12 +246,49 @@ EvidenceAdded    │                         └─ immutable audit record (acto
 CaseResolved     │
 EscalationAvailable ─┘
 
-EventBridge schedule ─▶ Lambda: scheduler ─▶ ReminderService.sweep()
-cron(30 2 * * ? *)                            · query the sparse follow-up index
-02:30 UTC = 08:00 IST                          · notification + timeline event
-                                               · escalation suggestion if unlocked
-                                               · push followUpAt forward
+EventBridge schedule ─▶ Lambda: scheduler ─┬▶ ReminderService.sweep()
+cron(30 2 * * ? *)                          │   · query the sparse follow-up index
+02:30 UTC = 08:00 IST                       │   · notification + timeline event
+                                            │   · escalation suggestion if unlocked
+                                            │   · push followUpAt forward
+                                            │
+                                            └▶ StatusCheckService.sweep()
+                                                · which cases have a reference on
+                                                  a page we can actually read
+                                                · ecs:RunTask, ONE task, whole batch
+                                                         │
+                       ┌─────────────────────────────────┘
+                       ▼
+            Fargate task (Playwright + Chromium, on demand)
+                       · reads each public status page
+                       · stops at any login wall or CAPTCHA
+                       · PutEvents: StatusCheckCompleted
+                       │
+                       ▼
+               EventBridge ─────▶ Lambda: events
+              (civicsos bus)      └─ StatusCheckService.applyResult()
+                                      · deterministic rules decide the meaning
 ```
+
+### The one container, and why it is one
+
+Chromium does not fit Lambda comfortably: the layer gymnastics, the 250 MB
+unzipped limit and the `/tmp` constraints are all solvable and all solved badly.
+A container is the right shape for a browser, and Fargate keeps it scale-to-zero
+— the task exists only while a batch is being checked, and the VPC it runs in
+has no NAT gateway, so nothing bills by the hour.
+
+**Outbound is `RunTask`, not an EventBridge ECS target**, because an ECS target
+starts one task per event: a dozen references would mean a dozen Chromium cold
+starts. The scheduler batches them into a single task instead. **Inbound is
+EventBridge**, onto the same bus and the same consumer as every other domain
+event, because fan-in is exactly what a bus is for.
+
+The worker observes; it never decides. Its task role permits one action
+(`events:PutEvents`) and it has no database access at all — the same separation
+applied to the language model elsewhere in this document, and for the same
+reason: an observer that can also act produces failures nobody can audit,
+because a wrong reading and a wrong decision look identical afterwards.
 
 ### Why a daily sweep rather than a timer per case
 

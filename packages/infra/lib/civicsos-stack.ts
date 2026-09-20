@@ -22,6 +22,7 @@ import { NodejsFunction } from 'aws-cdk-lib/aws-lambda-nodejs';
 import * as logs from 'aws-cdk-lib/aws-logs';
 import * as s3 from 'aws-cdk-lib/aws-s3';
 import type { Construct } from 'constructs';
+import { StatusCheckWorker } from './worker-construct';
 
 /**
  * CivicSOS infrastructure.
@@ -57,6 +58,14 @@ export interface CivicSosStackProps extends StackProps {
    * application's own limiter, just no WAF or edge cache.
    */
   enableEdge?: boolean;
+  /**
+   * Builds and deploys the containerised status-check worker.
+   *
+   * Off by default: it is the only part of the stack that needs Docker on the
+   * machine running `cdk deploy`, and the only part that creates a VPC. An
+   * existing deployment is entirely unaffected while this is false.
+   */
+  enableWorker?: boolean;
   /** Monthly budget ceiling in USD for the cost alarm. */
   monthlyBudgetUsd?: number;
 }
@@ -337,7 +346,10 @@ export class CivicSosStack extends Stack {
       eventBus,
       ruleName: `${prefix}-domain-events`,
       description: 'Routes CivicSOS domain events to the async consumer.',
-      eventPattern: { source: ['civicsos.app'] },
+      // `civicsos.worker` is the containerised status checker publishing an
+      // observation. Same consumer, same retry policy — it is just another
+      // domain event, and treating it specially would mean two code paths.
+      eventPattern: { source: ['civicsos.app', 'civicsos.worker'] },
       targets: [
         new targets.LambdaFunction(eventsFunction, {
           // Two retries then give up: these are enhancements, not the user's
@@ -356,6 +368,44 @@ export class CivicSosStack extends Stack {
       schedule: events.Schedule.cron({ minute: '30', hour: '2' }),
       targets: [new targets.LambdaFunction(schedulerFunction, { retryAttempts: 1 })],
     });
+
+    /* ------------------------------------------------------------ */
+    /* Status-check worker (optional)                               */
+    /* ------------------------------------------------------------ */
+
+    /**
+     * The one containerised component, and the only one that is not a Lambda.
+     *
+     * Outbound, the scheduler starts a single Fargate task carrying the whole
+     * batch — an EventBridge rule with an ECS target would launch one Chromium
+     * per complaint, which is the wrong shape for a cold start that costs
+     * seconds. Inbound, the worker publishes onto the same bus as everything
+     * else and the existing events consumer applies the result, so fan-in goes
+     * through EventBridge exactly as the rest of the system does.
+     */
+    if (props.enableWorker) {
+      const worker = new StatusCheckWorker(this, 'StatusCheckWorker', {
+        prefix,
+        stage,
+        eventBus,
+        practiceBaseUrl: props.allowedOrigins[0] ?? '',
+        logRetention: logs.RetentionDays.ONE_WEEK,
+      });
+
+      worker.grantRunTask(schedulerFunction);
+
+      schedulerFunction.addEnvironment('WORKER_CLUSTER_ARN', worker.cluster.clusterArn);
+      schedulerFunction.addEnvironment('WORKER_TASK_ARN', worker.taskDefinition.taskDefinitionArn);
+      schedulerFunction.addEnvironment('WORKER_CONTAINER_NAME', worker.containerName);
+      schedulerFunction.addEnvironment(
+        'WORKER_SUBNET_IDS',
+        worker.vpc.publicSubnets.map((subnet) => subnet.subnetId).join(','),
+      );
+      schedulerFunction.addEnvironment('WORKER_SECURITY_GROUP_ID', worker.securityGroup.securityGroupId);
+
+      new CfnOutput(this, 'WorkerClusterArn', { value: worker.cluster.clusterArn });
+      new CfnOutput(this, 'WorkerTaskArn', { value: worker.taskDefinition.taskDefinitionArn });
+    }
 
     /* ------------------------------------------------------------ */
     /* HTTP API                                                     */

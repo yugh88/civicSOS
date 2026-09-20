@@ -130,7 +130,11 @@ export type DomainEventType =
   | 'EvidenceAdded'
   | 'FollowUpDue'
   | 'EscalationAvailable'
-  | 'CaseResolved';
+  | 'CaseResolved'
+  /** Asks the browser worker to read one case's public status page. */
+  | 'StatusCheckRequested'
+  /** The worker reporting what it saw. Never a decision, only an observation. */
+  | 'StatusCheckCompleted';
 
 export interface DomainEvent {
   type: DomainEventType;

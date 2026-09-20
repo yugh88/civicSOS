@@ -9,21 +9,23 @@
     "packages/aws",
     "packages/infra",
     "apps/web",
-    "apps/extension"
+    "apps/extension",
+    "apps/worker"
   ],
   "scripts": {
     "build": "npm run build -w @civicsos/core && npm run build -w @civicsos/aws && npm run build -w @civicsos/web",
     "build:core": "npm run build -w @civicsos/core",
     "dev": "npm run dev -w @civicsos/web",
-    "test": "npm run test -w @civicsos/core",
+    "test": "npm run test -w @civicsos/core && npm run test -w @civicsos/worker",
     "test:watch": "npm run test:watch -w @civicsos/core",
     "typecheck": "npm run typecheck --workspaces --if-present",
     "lint": "npm run lint -w @civicsos/web",
-    "verify": "npm run typecheck && npm run test && npm run build && npm run build:extension",
+    "verify": "npm run typecheck && npm run test && npm run build && npm run build:extension && npm run build:worker",
     "cdk": "npm run cdk -w @civicsos/infra --",
     "deploy:infra": "npm run deploy -w @civicsos/infra",
     "openapi": "node scripts/generate-openapi.mjs",
-    "build:extension": "npm run build -w @civicsos/extension"
+    "build:extension": "npm run build -w @civicsos/extension",
+    "build:worker": "npm run build -w @civicsos/worker"
   },
   "engines": {
     "node": ">=20"

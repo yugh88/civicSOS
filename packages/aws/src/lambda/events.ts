@@ -1,5 +1,5 @@
 import type { EventBridgeHandler } from 'aws-lambda';
-import { newNotificationId, unixSeconds } from '@civicsos/core';
+import { newNotificationId, StatusCheckService, unixSeconds, type StatusCheckResult } from '@civicsos/core';
 import { getAwsRuntime } from '../runtime.js';
 
 /**
@@ -31,6 +31,25 @@ export const handler: EventBridgeHandler<string, CaseEventDetail, void> = async 
     eventType: event['detail-type'],
     caseId: event.detail?.caseId,
   });
+
+  /**
+   * The worker's observations arrive here like any other domain event.
+   *
+   * Handled before the owner guard below because a status result deliberately
+   * carries no owner: the worker is not trusted to say whose case this is, so
+   * the service reads that from the stored record instead. A malformed result
+   * therefore cannot drop one citizen's case into another's notifications.
+   */
+  if (event['detail-type'] === 'StatusCheckCompleted') {
+    const result = event.detail as unknown as StatusCheckResult;
+    if (!result?.caseId || !result?.targetId || !result?.outcome) {
+      logger.warn('ignoring a malformed status check result');
+      return;
+    }
+    const applied = await new StatusCheckService(runtime.ctx).applyResult(result);
+    logger.info('status check result handled', { applied: applied.applied, reason: applied.reason });
+    return;
+  }
 
   const { caseId, ownerId } = event.detail ?? {};
   if (!caseId || !ownerId) {

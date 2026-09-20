@@ -332,6 +332,9 @@ packages/aws/      Adapters for the core's ports (DynamoDB, S3, EventBridge,
 packages/infra/    AWS CDK stack.
 apps/extension/    Optional browser assistant: fills supported fields on verified
                    official portals. Never submits, never handles a login.
+apps/worker/       Containerised Chromium (Playwright) that runs on demand as an
+                   ECS Fargate task, reads a public complaint status page, and
+                   reports what it saw. Files nothing; observes only.
 apps/web/          Next.js 15 app, and the local in-memory API for development.
 scripts/           OpenAPI generation.
 docs/              Generated OpenAPI document.

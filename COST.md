@@ -206,9 +206,9 @@ Cost controls specific to the AI path:
 
 | Rejected | Why |
 | --- | --- |
-| EC2 / ECS / EKS / Fargate | Hourly billing for a workload that is idle most of the time |
+| EC2 / EKS / ECS-on-EC2 | Hourly billing for a workload that is idle most of the time. **Fargate is the one exception** — see the status-check worker below: it is on-demand, scale-to-zero, and runs a browser, which genuinely does not fit Lambda |
 | RDS / Aurora | ~$15+/month floor, plus a VPC, plus the NAT gateway below |
-| **NAT Gateway** | ~$32/month *before any traffic*. Would silently be the single largest line item. Avoided entirely by keeping Lambda out of a VPC — which is possible because DynamoDB, S3, EventBridge and SSM are all reached over public AWS endpoints with IAM auth |
+| **NAT Gateway** | ~$32/month *before any traffic*. Would silently be the single largest line item. Avoided entirely: Lambda stays out of a VPC (DynamoDB, S3, EventBridge and SSM are all reached over public AWS endpoints with IAM auth), and the worker's VPC has `natGateways: 0` — its tasks sit in a public subnet with a per-second public IP instead |
 | ElastiCache / Redis | An always-on node for a workload with no hot key problem |
 | OpenSearch | Cheapest viable cluster is tens of dollars a month; DynamoDB queries answer every question asked |
 | Secrets Manager | ~$0.40/secret/month for what Parameter Store does free |
@@ -244,12 +244,21 @@ Assuming a hackathon deployment and light real usage — say 5,000 API requests,
 | SSM Parameter Store | 2 standard SecureStrings | **$0.00** |
 | AWS Budgets | 1 budget | **$0.00** (2 free) |
 | Gemini | ~500 classifications | **$0.00** (free tier) |
-| **Total** | | **≈ $0.00** |
+| Fargate (status worker, opt-in) | 30 runs × ~3 min @ 0.5 vCPU / 1 GB | **≈ $0.04** |
+| Public IPv4 (worker, while running) | ~1.5 hours/month @ $0.005/hr | **≈ $0.01** |
+| ECR storage (Playwright image) | ~2 GB, 3 images retained | **≈ $0.20** |
+| **Total** | | **≈ $0.25** |
 
 Beyond the free tier the marginal cost stays small: roughly **$1.00 per million**
 API Gateway requests, **$0.20 per million** Lambda requests plus GB-seconds,
 **$1.25 per million** DynamoDB writes and **$0.25 per million** reads, and
 **$0.023 per GB-month** of S3.
+
+The status-check worker is the only component that is not free, and it is
+opt-in (`-c enableWorker=true`). Its cost is dominated by ECR image storage
+rather than compute: the task itself runs for about three minutes a day. There
+is no cluster charge, no NAT gateway and nothing billing by the hour — an idle
+deployment with the worker enabled still costs only the ~$0.20 of stored image.
 
 The realistic worst case is a traffic spike. At the configured throttle of 10 rps
 sustained, a full month of saturated traffic is ~26M requests — about **$26 of
