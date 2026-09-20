@@ -3,6 +3,7 @@
 import { useCallback, useState } from 'react';
 import { useApi } from '@/lib/auth';
 import type { PreparedSubmission } from '@/lib/types';
+import { HANDOFF_PARAM, storeHandoff } from '@/lib/practice-handoff';
 import { AgentExecution } from './AgentExecution';
 import { Alert, Badge, Button, Card, Dot, Field, Input } from './ui';
 import { IconArrowRight, IconCheck, IconSend, IconShield, IconSparkle } from './icons';
@@ -249,12 +250,25 @@ function OfficialHandoff({
    * a real government site.
    */
   const openPractice = useCallback(async () => {
+    /*
+     * Two hand-off routes, and the page takes whichever arrives.
+     *
+     * The extension is offered the payload first, because that is the path a
+     * real portal would have to use. But the practice portal is same-origin
+     * with this app, so it can also be handed the complaint directly — which
+     * means the flow works for anyone who opens CivicSOS, with nothing
+     * installed and nothing configured. Without that, "watch the assistant
+     * work" would open an empty form for almost every visitor.
+     */
     const handed = await handoffToAssistant(prepared, {
       origin: window.location.origin,
       pathPrefix: PRACTICE_PATH,
     });
     setPracticeHandedOff(handed);
-    window.open(PRACTICE_PATH, '_blank', 'noopener,noreferrer');
+
+    const id = storeHandoff(prepared.payload);
+    const target = id ? `${PRACTICE_PATH}?${HANDOFF_PARAM}=${id}` : PRACTICE_PATH;
+    window.open(target, '_blank', 'noopener,noreferrer');
   }, [prepared]);
 
   /**
@@ -345,9 +359,9 @@ function OfficialHandoff({
       <Card className="p-5">
         <h3 className="text-[15px] font-semibold text-ink">See what the assistant does first</h3>
         <p className="mt-1.5 text-sm leading-relaxed text-ink-muted">
-          CivicSOS includes a practice form of its own. Open it to watch the assistant fill the supported fields, stop
-          at the sign-in step, stop again at the CAPTCHA, and leave Submit alone. It is not a government website and it
-          sends nothing anywhere.
+          CivicSOS includes a practice grievance portal of its own. Open it and the assistant carries this complaint
+          across: it waits at the sign-in step, waits again at the CAPTCHA, fills the supported fields once you have
+          cleared both yourself, and leaves Submit alone. It is not a government website and it sends nothing anywhere.
         </p>
 
         <div className="mt-4 flex flex-wrap items-center gap-3">
@@ -356,8 +370,8 @@ function OfficialHandoff({
           </Button>
           {practiceHandedOff === false ? (
             <p className="text-xs text-ink-muted">
-              The browser assistant isn&apos;t installed, so the practice form will open empty — the copy buttons below
-              work the same way there.
+              Running without the browser extension — the practice portal shares this app&apos;s origin, so the
+              hand-off works anyway. A real portal would need the extension.
             </p>
           ) : null}
         </div>
