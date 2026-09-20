@@ -13,7 +13,7 @@
   },
   "dependencies": {
     "@aws-sdk/client-eventbridge": "^3.687.0",
-    "playwright": "1.49.1"
+    "playwright-core": "1.49.1"
   },
   "devDependencies": {
     "@types/node": "^22.20.3",

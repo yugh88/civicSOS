@@ -16,6 +16,18 @@ It is not a chatbot and not a directory. A language model helps read your
 sentence; a deterministic rules engine and a gated agent do everything that
 matters.
 
+### Live
+
+| | |
+| --- | --- |
+| **Frontend** | <https://main.ddwkb18wxep69.amplifyapp.com> — Amplify app `ddwkb18wxep69`, provisioned and configured, **awaiting its one-time GitHub authorization** (see [DEPLOYMENT.md](DEPLOYMENT.md#5-deploy-the-frontend)) |
+| **API** | <https://irgqapg999.execute-api.ap-south-1.amazonaws.com> — live, `GET /health` returns `{"status":"ok","stage":"prod"}` |
+| **Region** | `ap-south-1` (Mumbai) |
+
+The backend is deployed and serving. The frontend's Amplify app exists with its
+environment wired to the API above; connecting the repository needs a browser
+OAuth grant, which is the last step and the only one that cannot be scripted.
+
 ### The agent
 
 ```
@@ -63,6 +75,10 @@ submission, because none of those come from model output.
 | [COST.md](COST.md) | Why each AWS service was chosen and how runaway cost is prevented |
 | [DEMO.md](DEMO.md) | The three-minute demo script |
 | [docs/openapi.json](docs/openapi.json) | Generated OpenAPI 3.1 document |
+| [docs/wireframe.svg](docs/wireframe.svg) | The core journey across five screens |
+| [docs/architecture.svg](docs/architecture.svg) | AWS architecture, marked by what is deployed |
+| [apps/worker/README.md](apps/worker/README.md) | The status-check worker: what it does and what it refuses |
+| [apps/extension/README.md](apps/extension/README.md) | The browser assistant and its verified-mapping policy |
 
 ---
 
@@ -167,36 +183,17 @@ no tool:
 - **When the AI is unavailable, it says so** and falls back to its own rules
   rather than silently degrading.
 
+## The journey, screen by screen
+
+![CivicSOS wireframe — describe the problem, review the plan, choose how to submit, watch the agent, track the case](docs/wireframe.svg)
+
 ## Architecture in one picture
 
-```
-                      ┌──────────────────────────────┐
-  Browser  ──────────▶│  Next.js 15 (App Router, TS) │  AWS Amplify Hosting
-                      │  light-mode UI, mobile-first │
-                      └───────────┬──────────────────┘
-                                  │ bearer token (Cognito ID / guest demo)
-                                  ▼
-                      ┌──────────────────────────────┐
-                      │  API Gateway (HTTP API)      │  throttled 10 rps / 20 burst
-                      └───────────┬──────────────────┘
-                                  ▼
-                      ┌──────────────────────────────┐
-                      │  Lambda: API  (arm64, Node22)│
-                      │  ┌────────────────────────┐  │
-                      │  │ @civicsos/core         │  │  router → services → rules
-                      │  │  no AWS SDK inside     │  │  ports & adapters
-                      │  └────────────────────────┘  │
-                      └──┬────────┬─────────┬────────┘
-                         │        │         │
-              DynamoDB ◀─┘        │         └─▶ EventBridge bus
-        single table, 3 GSIs      │                   │
-                                  │                   ├─▶ Lambda: Events
-                        S3 ◀──────┘                   │    notifications, audit
-             private, pre-signed URLs only            │
-                                                      └─▶ Lambda: Scheduler
-  Gemini free tier ◀── time-boxed, PII-minimized           daily follow-up sweep
-  (classification only, never authority/policy)
-```
+![CivicSOS AWS architecture](docs/architecture.svg)
+
+Everything above is serverless and scales to zero. The one container — the
+status-check worker — is an on-demand Fargate task that exists only while a
+batch is being checked, and is not deployed unless you ask for it.
 
 Secrets live in SSM Parameter Store as SecureString parameters and are read once
 per Lambda container. Nothing secret is in the repository, the CloudFormation
@@ -216,10 +213,15 @@ template, or Lambda's visible environment configuration.
 | **CloudWatch** | Structured logs, alarms | 1-week retention; alarms on errors and on unusual volume |
 | **SSM Parameter Store** | Secrets | SecureString is free; Secrets Manager would cost ~$0.40/secret/month |
 | **AWS Budgets** | Cost ceiling | First two budgets are free; alerts at 50% actual and 100% forecast |
+| **WAF** *(created, not attached)* | Managed rule groups + per-IP rate limit | Cannot attach to an HTTP API, so it waits on CloudFront account verification |
+| **ECS Fargate** *(optional)* | Status-check worker | Chromium does not fit Lambda well; on-demand tasks keep it scale-to-zero |
 
-Deliberately **not** used: EC2, RDS, ElastiCache, ECS/EKS, NAT Gateway,
-OpenSearch, or anything else that bills while idle. Full reasoning in
-[COST.md](COST.md).
+Deliberately **not** used: EC2, RDS, ElastiCache, EKS, **NAT Gateway**,
+OpenSearch, Step Functions, Secrets Manager, or anything else that bills while
+idle. Fargate is the single exception to the "no containers" rule and earns it:
+a browser genuinely does not fit in Lambda, the task runs about three minutes a
+day, and its VPC is configured `natGateways: 0` so nothing bills hourly. Full
+reasoning, including a per-service cost estimate, in [COST.md](COST.md).
 
 ## The role of Gemini
 
@@ -291,10 +293,17 @@ curl -X POST http://localhost:3000/api/dev/sweep
 ## Verify
 
 ```bash
-npm run verify     # typecheck every workspace, run the test suite, production build
-npm test           # 183 tests: agent policy, providers, rules, AI fallback, auth, points
+npm run verify     # typecheck all 6 workspaces, run every test, build web + extension + worker
+npm test           # 216 tests: agent policy, providers, rules, AI fallback, auth, points, status checks
+npm run lint       # ESLint across the web app
 npm run openapi    # regenerate docs/openapi.json from the live route table
 ```
+
+Current state: **216 passing** — 207 in `@civicsos/core`, 9 in `@civicsos/worker`.
+`npm run verify` also re-checks both selector registries against the pages they
+describe, so a renamed element fails the build instead of silently producing a
+"verified" autofill that fills nothing, or a "verified" status read of a page
+nobody looked at.
 
 The suite covers the things that would actually hurt: cross-user access on every
 read and write path, unauthenticated access to every private endpoint, malformed
@@ -310,16 +319,39 @@ the same case, refused on an incomplete complaint, refused on someone else's
 case, refused on a closed case, and the guarantee that every reference it issues
 is marked as simulated in three independent places.
 
+For the status-check worker, the tests assert on what it *did not* touch: that a
+sign-in wall or a CAPTCHA — whether present on load or appearing only after the
+lookup — produces `NEEDS_HUMAN` with nothing typed and nothing clicked, that an
+unregistered target is never visited, that only the citizen's own reference is
+ever entered, and that "has not been resolved" is never read as resolved.
+
 ## Deploy
 
 See [DEPLOYMENT.md](DEPLOYMENT.md) for the full procedure, including the two
-secrets you must create yourself and the rollback path. The short version:
+secrets you must create yourself and the rollback path.
+
+**Backend** — everything except the frontend and the optional worker:
 
 ```bash
 npm run build -w @civicsos/core
-npm run deploy:infra -- -c stage=dev \
-  -c allowedOrigins=https://your-app.amplifyapp.com \
+npm run deploy:infra -- -c stage=prod \
+  -c allowedOrigins=https://main.ddwkb18wxep69.amplifyapp.com \
   -c alertEmail=you@example.com
+```
+
+**Frontend** — Amplify builds from `amplify.yml` in this repository on every
+push to `main`. The app and its environment variables already exist; connecting
+the GitHub repository is a one-time browser authorization, described in
+[DEPLOYMENT.md](DEPLOYMENT.md#5-deploy-the-frontend).
+
+**Optional extras**, each off by default and each additive:
+
+```bash
+# WAF + CloudFront, once account verification clears
+npm run cdk -- deploy --all
+
+# The containerised status-check worker (needs Docker running locally)
+npm run cdk -- deploy CivicSos-prod -c enableWorker=true
 ```
 
 ## Repository layout

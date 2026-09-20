@@ -1,0 +1,258 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1180 900" width="1180" height="900" font-family="ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif">
+  <title>CivicSOS product wireframe</title>
+  <desc>The core journey across five screens: describe the problem, review the plan, choose how to submit, watch the agent, then track the case.</desc>
+
+  <defs>
+    <marker id="w" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0 0 L10 5 L0 10 z" fill="#2563eb"/>
+    </marker>
+  </defs>
+
+  <rect width="1180" height="900" fill="#f7f8fa"/>
+
+  <text x="40" y="46" font-size="22" font-weight="600" fill="#172033">CivicSOS — the core journey</text>
+  <text x="40" y="70" font-size="13" fill="#64748b">Light mode only. Mobile-first. The citizen never has to understand the technology, and is never told something happened that did not.</text>
+
+  <!-- ============ 1. Report ============ -->
+  <g>
+    <rect x="40" y="104" width="330" height="330" rx="12" fill="#ffffff" stroke="#e2e6eb"/>
+    <rect x="40" y="104" width="330" height="34" rx="12" fill="#f1f3f5"/>
+    <rect x="40" y="126" width="330" height="12" fill="#f1f3f5"/>
+    <circle cx="58" cy="121" r="4" fill="#d3d9e0"/><circle cx="72" cy="121" r="4" fill="#d3d9e0"/><circle cx="86" cy="121" r="4" fill="#d3d9e0"/>
+    <text x="205" y="125" font-size="10" fill="#64748b" text-anchor="middle">/report</text>
+
+    <!-- stepper -->
+    <rect x="62" y="152" width="58" height="16" rx="8" fill="#2563eb"/>
+    <text x="91" y="164" font-size="9" fill="#ffffff" text-anchor="middle">1 Describe</text>
+    <rect x="126" y="152" width="56" height="16" rx="8" fill="#f1f3f5"/>
+    <text x="154" y="164" font-size="9" fill="#94a3b8" text-anchor="middle">2 Approve</text>
+    <rect x="188" y="152" width="60" height="16" rx="8" fill="#f1f3f5"/>
+    <text x="218" y="164" font-size="9" fill="#94a3b8" text-anchor="middle">3 We submit</text>
+    <rect x="254" y="152" width="52" height="16" rx="8" fill="#f1f3f5"/>
+    <text x="280" y="164" font-size="9" fill="#94a3b8" text-anchor="middle">4 Track it</text>
+
+    <text x="205" y="198" font-size="16" font-weight="600" fill="#172033" text-anchor="middle">Tell us what happened.</text>
+    <text x="205" y="216" font-size="10" fill="#64748b" text-anchor="middle">No complicated forms. Just describe the problem.</text>
+
+    <rect x="62" y="232" width="286" height="62" rx="8" fill="#ffffff" stroke="#d3d9e0"/>
+    <text x="74" y="252" font-size="10" fill="#94a3b8">There has been garbage outside my</text>
+    <text x="74" y="268" font-size="10" fill="#94a3b8">apartment for 4 days.</text>
+
+    <text x="62" y="312" font-size="8.5" fill="#94a3b8" letter-spacing="0.4">OR START FROM AN EXAMPLE</text>
+    <rect x="62" y="320" width="120" height="18" rx="9" fill="#ffffff" stroke="#e2e6eb"/>
+    <rect x="188" y="320" width="106" height="18" rx="9" fill="#ffffff" stroke="#e2e6eb"/>
+
+    <text x="62" y="360" font-size="8.5" fill="#94a3b8" letter-spacing="0.4">CATEGORY  (optional — we can work it out)</text>
+    <rect x="62" y="368" width="72" height="18" rx="9" fill="#ffffff" stroke="#e2e6eb"/>
+    <rect x="140" y="368" width="86" height="18" rx="9" fill="#eff6ff" stroke="#bfdbfe"/>
+    <text x="183" y="380" font-size="8.5" fill="#1d4ed8" text-anchor="middle">Garbage</text>
+    <rect x="232" y="368" width="62" height="18" rx="9" fill="#ffffff" stroke="#e2e6eb"/>
+
+    <rect x="62" y="396" width="286" height="26" rx="8" fill="#2563eb"/>
+    <text x="205" y="413" font-size="11" font-weight="500" fill="#ffffff" text-anchor="middle">Let CivicSOS handle it  →</text>
+  </g>
+  <text x="205" y="456" font-size="11" font-weight="600" fill="#172033" text-anchor="middle">1 · Describe it</text>
+  <text x="205" y="472" font-size="10" fill="#64748b" text-anchor="middle">One sentence. Photo and location are optional</text>
+  <text x="205" y="486" font-size="10" fill="#64748b" text-anchor="middle">and collected progressively, never up front.</text>
+
+  <!-- ============ 2. Plan ============ -->
+  <g>
+    <rect x="425" y="104" width="330" height="330" rx="12" fill="#ffffff" stroke="#e2e6eb"/>
+    <rect x="425" y="104" width="330" height="34" rx="12" fill="#f1f3f5"/>
+    <rect x="425" y="126" width="330" height="12" fill="#f1f3f5"/>
+    <circle cx="443" cy="121" r="4" fill="#d3d9e0"/><circle cx="457" cy="121" r="4" fill="#d3d9e0"/><circle cx="471" cy="121" r="4" fill="#d3d9e0"/>
+    <text x="590" y="125" font-size="10" fill="#64748b" text-anchor="middle">/report — step 2</text>
+
+    <text x="590" y="166" font-size="15" font-weight="600" fill="#172033" text-anchor="middle">Here's what I understood</text>
+
+    <!-- facts strip -->
+    <rect x="447" y="180" width="70" height="38" rx="7" fill="#f7f8fa" stroke="#e2e6eb"/>
+    <text x="482" y="194" font-size="7.5" fill="#94a3b8" text-anchor="middle">CATEGORY</text>
+    <text x="482" y="208" font-size="9" fill="#172033" text-anchor="middle">Garbage</text>
+    <rect x="523" y="180" width="70" height="38" rx="7" fill="#f7f8fa" stroke="#e2e6eb"/>
+    <text x="558" y="194" font-size="7.5" fill="#94a3b8" text-anchor="middle">LOCATION</text>
+    <text x="558" y="208" font-size="9" fill="#172033" text-anchor="middle">MG Road</text>
+    <rect x="599" y="180" width="70" height="38" rx="7" fill="#f7f8fa" stroke="#e2e6eb"/>
+    <text x="634" y="194" font-size="7.5" fill="#94a3b8" text-anchor="middle">PRIORITY</text>
+    <text x="634" y="208" font-size="9" fill="#172033" text-anchor="middle">Normal</text>
+    <rect x="675" y="180" width="58" height="38" rx="7" fill="#f7f8fa" stroke="#e2e6eb"/>
+    <text x="704" y="194" font-size="7.5" fill="#94a3b8" text-anchor="middle">EVIDENCE</text>
+    <text x="704" y="208" font-size="9" fill="#172033" text-anchor="middle">1 photo</text>
+
+    <text x="447" y="240" font-size="11" font-weight="600" fill="#172033">What happens next</text>
+
+    <!-- timeline -->
+    <circle cx="456" cy="258" r="7" fill="#15803d"/>
+    <text x="456" y="262" font-size="8" fill="#ffffff" text-anchor="middle">✓</text>
+    <text x="472" y="255" font-size="9.5" fill="#172033">We worked out what this is</text>
+    <text x="472" y="268" font-size="8.5" fill="#64748b">Municipal corporation — sanitation</text>
+    <line x1="456" y1="266" x2="456" y2="286" stroke="#bbf7d0" stroke-width="2"/>
+
+    <circle cx="456" cy="294" r="7" fill="#2563eb"/>
+    <text x="456" y="298" font-size="8" fill="#ffffff" text-anchor="middle">2</text>
+    <rect x="468" y="282" width="264" height="26" rx="6" fill="#eff6ff" stroke="#bfdbfe"/>
+    <text x="478" y="294" font-size="9.5" fill="#172033">Gather the required evidence</text>
+    <text x="478" y="304" font-size="8.5" fill="#64748b">Still needed: exact location, how long</text>
+    <line x1="456" y1="302" x2="456" y2="322" stroke="#e2e6eb" stroke-width="2"/>
+
+    <circle cx="456" cy="330" r="7" fill="#ffffff" stroke="#d3d9e0"/>
+    <text x="456" y="334" font-size="8" fill="#94a3b8" text-anchor="middle">3</text>
+    <text x="472" y="327" font-size="9.5" fill="#64748b">Submit through the official channel</text>
+    <text x="472" y="340" font-size="8.5" fill="#94a3b8">You submit this — CivicSOS does not file for you</text>
+    <line x1="456" y1="338" x2="456" y2="358" stroke="#e2e6eb" stroke-width="2"/>
+
+    <circle cx="456" cy="366" r="7" fill="#ffffff" stroke="#d3d9e0"/>
+    <text x="456" y="370" font-size="8" fill="#94a3b8" text-anchor="middle">4</text>
+    <text x="472" y="363" font-size="9.5" fill="#64748b">Follow up if nothing happens</text>
+    <text x="472" y="376" font-size="8.5" fill="#94a3b8">Typical window is about 7 days</text>
+
+    <rect x="447" y="394" width="286" height="12" rx="6" fill="#fffbeb" stroke="#fde68a"/>
+    <text x="590" y="403" font-size="8" fill="#b45309" text-anchor="middle">Generic template — confirm details on your own city's site</text>
+  </g>
+  <text x="590" y="456" font-size="11" font-weight="600" fill="#172033" text-anchor="middle">2 · See the whole path</text>
+  <text x="590" y="472" font-size="10" fill="#64748b" text-anchor="middle">Who handles it, what evidence is needed, when to</text>
+  <text x="590" y="486" font-size="10" fill="#64748b" text-anchor="middle">follow up, how to escalate. Sample data is labelled.</text>
+
+  <!-- ============ 3. Choose ============ -->
+  <g>
+    <rect x="810" y="104" width="330" height="330" rx="12" fill="#ffffff" stroke="#e2e6eb"/>
+    <rect x="810" y="104" width="330" height="34" rx="12" fill="#f1f3f5"/>
+    <rect x="810" y="126" width="330" height="12" fill="#f1f3f5"/>
+    <circle cx="828" cy="121" r="4" fill="#d3d9e0"/><circle cx="842" cy="121" r="4" fill="#d3d9e0"/><circle cx="856" cy="121" r="4" fill="#d3d9e0"/>
+    <text x="975" y="125" font-size="10" fill="#64748b" text-anchor="middle">/report — step 3</text>
+
+    <text x="975" y="166" font-size="15" font-weight="600" fill="#172033" text-anchor="middle">Your complaint is ready</text>
+    <text x="975" y="183" font-size="10" fill="#64748b" text-anchor="middle">Choose submission method</text>
+
+    <!-- demo card -->
+    <rect x="832" y="198" width="140" height="150" rx="9" fill="#ffffff" stroke="#e2e6eb"/>
+    <rect x="846" y="212" width="24" height="24" rx="7" fill="#eff6ff"/>
+    <rect x="896" y="216" width="62" height="14" rx="7" fill="#fffbeb" stroke="#fde68a"/>
+    <text x="927" y="226" font-size="7.5" fill="#b45309" text-anchor="middle">Demo Simulation</text>
+    <text x="846" y="258" font-size="10" font-weight="600" fill="#172033">Run Demo</text>
+    <text x="846" y="271" font-size="10" font-weight="600" fill="#172033">Submission</text>
+    <text x="846" y="288" font-size="8.5" fill="#64748b">See the workflow safely,</text>
+    <text x="846" y="299" font-size="8.5" fill="#64748b">end to end. Nothing</text>
+    <text x="846" y="310" font-size="8.5" fill="#64748b">reaches any authority.</text>
+    <rect x="846" y="320" width="112" height="18" rx="8" fill="#2563eb"/>
+    <text x="902" y="332" font-size="8.5" fill="#ffffff" text-anchor="middle">Run Demo  →</text>
+
+    <!-- official card -->
+    <rect x="982" y="198" width="140" height="150" rx="9" fill="#ffffff" stroke="#e2e6eb"/>
+    <rect x="996" y="212" width="24" height="24" rx="7" fill="#f0fdf4"/>
+    <rect x="1050" y="216" width="58" height="14" rx="7" fill="#f0fdf4" stroke="#bbf7d0"/>
+    <text x="1079" y="226" font-size="7.5" fill="#15803d" text-anchor="middle">Official Website</text>
+    <text x="996" y="258" font-size="10" font-weight="600" fill="#172033">Continue on</text>
+    <text x="996" y="271" font-size="10" font-weight="600" fill="#172033">official website</text>
+    <text x="996" y="288" font-size="8.5" fill="#64748b">Opens the verified</text>
+    <text x="996" y="299" font-size="8.5" fill="#64748b">channel. Stops before</text>
+    <text x="996" y="310" font-size="8.5" fill="#64748b">Submit — you press it.</text>
+    <rect x="996" y="320" width="112" height="18" rx="8" fill="#ffffff" stroke="#d3d9e0"/>
+    <text x="1052" y="332" font-size="8.5" fill="#172033" text-anchor="middle">Continue  →</text>
+
+    <rect x="832" y="364" width="290" height="46" rx="8" fill="#f7f8fa" stroke="#e2e6eb"/>
+    <text x="977" y="381" font-size="8.5" fill="#64748b" text-anchor="middle">Two genuinely different things, so they are two choices —</text>
+    <text x="977" y="394" font-size="8.5" fill="#64748b" text-anchor="middle">not one button with a caveat. Neither borrows the</text>
+    <text x="977" y="404" font-size="8.5" fill="#64748b" text-anchor="middle">other's language.</text>
+  </g>
+  <text x="975" y="456" font-size="11" font-weight="600" fill="#172033" text-anchor="middle">3 · Choose how it goes out</text>
+  <text x="975" y="472" font-size="10" fill="#64748b" text-anchor="middle">The demo always works and reaches nobody. The official</text>
+  <text x="975" y="486" font-size="10" fill="#64748b" text-anchor="middle">path is real, and hands control back to the citizen.</text>
+
+  <!-- ============ 4. Agent ============ -->
+  <g>
+    <rect x="40" y="524" width="520" height="286" rx="12" fill="#ffffff" stroke="#e2e6eb"/>
+    <rect x="40" y="524" width="520" height="34" rx="12" fill="#f1f3f5"/>
+    <rect x="40" y="546" width="520" height="12" fill="#f1f3f5"/>
+    <circle cx="58" cy="541" r="4" fill="#d3d9e0"/><circle cx="72" cy="541" r="4" fill="#d3d9e0"/><circle cx="86" cy="541" r="4" fill="#d3d9e0"/>
+    <text x="300" y="545" font-size="10" fill="#64748b" text-anchor="middle">/report — the agent runs</text>
+
+    <rect x="62" y="574" width="476" height="24" rx="7" fill="#fffbeb" stroke="#fde68a"/>
+    <text x="300" y="590" font-size="9.5" font-weight="600" fill="#b45309" text-anchor="middle">DEMO SUBMISSION ENVIRONMENT — simulation, not a government website</text>
+
+    <rect x="62" y="610" width="476" height="140" rx="9" fill="#ffffff" stroke="#e2e6eb"/>
+    <rect x="62" y="610" width="476" height="28" rx="9" fill="#eff6ff"/>
+    <rect x="62" y="630" width="476" height="8" fill="#eff6ff"/>
+    <text x="80" y="629" font-size="10" font-weight="600" fill="#1d4ed8">CivicSOS Agent</text>
+
+    <circle cx="86" cy="660" r="7" fill="#15803d"/><text x="86" y="664" font-size="8" fill="#ffffff" text-anchor="middle">✓</text>
+    <text x="102" y="657" font-size="9.5" fill="#172033">Understanding the problem</text>
+    <text x="102" y="669" font-size="8.5" fill="#64748b">Classified as garbage &amp; sanitation for MG Road, Pune.</text>
+
+    <circle cx="86" cy="692" r="7" fill="#15803d"/><text x="86" y="696" font-size="8" fill="#ffffff" text-anchor="middle">✓</text>
+    <text x="102" y="689" font-size="9.5" fill="#172033">Finding the right channel</text>
+    <text x="102" y="701" font-size="8.5" fill="#64748b">Swachhata app — a verified official channel.</text>
+
+    <circle cx="86" cy="724" r="7" fill="#2563eb"/>
+    <text x="102" y="721" font-size="9.5" fill="#172033">Preparing your complaint</text>
+    <text x="102" y="733" font-size="8.5" fill="#64748b">Drafting from the facts you approved…</text>
+
+    <rect x="62" y="762" width="476" height="32" rx="8" fill="#f7f8fa" stroke="#e2e6eb"/>
+    <text x="300" y="776" font-size="8.5" fill="#64748b" text-anchor="middle">Every step here is a server-returned action from a closed set of 13, checked against a policy gate.</text>
+    <text x="300" y="788" font-size="8.5" fill="#64748b" text-anchor="middle">Nothing is invented client-side, and no step claims an authority received anything.</text>
+  </g>
+  <text x="300" y="836" font-size="11" font-weight="600" fill="#172033" text-anchor="middle">4 · Watch the agent work</text>
+  <text x="300" y="852" font-size="10" fill="#64748b" text-anchor="middle">Visible, step by step, and labelled a simulation wherever it is one.</text>
+
+  <!-- ============ 5. Case ============ -->
+  <g>
+    <rect x="620" y="524" width="520" height="286" rx="12" fill="#ffffff" stroke="#e2e6eb"/>
+    <rect x="620" y="524" width="520" height="34" rx="12" fill="#f1f3f5"/>
+    <rect x="620" y="546" width="520" height="12" fill="#f1f3f5"/>
+    <circle cx="638" cy="541" r="4" fill="#d3d9e0"/><circle cx="652" cy="541" r="4" fill="#d3d9e0"/><circle cx="666" cy="541" r="4" fill="#d3d9e0"/>
+    <text x="880" y="545" font-size="10" fill="#64748b" text-anchor="middle">/cases/[caseId]</text>
+
+    <rect x="642" y="572" width="76" height="14" rx="7" fill="#fffbeb" stroke="#fde68a"/>
+    <text x="680" y="582" font-size="7.5" fill="#b45309" text-anchor="middle">Follow-up ready</text>
+    <rect x="724" y="572" width="52" height="14" rx="7" fill="#eff6ff" stroke="#bfdbfe"/>
+    <text x="750" y="582" font-size="7.5" fill="#1d4ed8" text-anchor="middle">Streetlights</text>
+
+    <text x="642" y="606" font-size="13" font-weight="600" fill="#172033">A full stretch of street lighting has been out</text>
+    <text x="642" y="622" font-size="13" font-weight="600" fill="#172033">for three weeks.</text>
+
+    <!-- progress -->
+    <rect x="642" y="636" width="94" height="4" rx="2" fill="#2563eb"/>
+    <rect x="742" y="636" width="94" height="4" rx="2" fill="#2563eb"/>
+    <rect x="842" y="636" width="94" height="4" rx="2" fill="#2563eb"/>
+    <rect x="942" y="636" width="94" height="4" rx="2" fill="#e2e6eb"/>
+    <rect x="1042" y="636" width="76" height="4" rx="2" fill="#e2e6eb"/>
+    <text x="642" y="652" font-size="7.5" fill="#64748b">Reported</text>
+    <text x="742" y="652" font-size="7.5" fill="#64748b">Analysed</text>
+    <text x="842" y="652" font-size="7.5" fill="#64748b">Submitted</text>
+    <text x="942" y="652" font-size="7.5" fill="#94a3b8">In progress</text>
+    <text x="1042" y="652" font-size="7.5" fill="#94a3b8">Resolved</text>
+
+    <!-- facts -->
+    <rect x="642" y="664" width="115" height="40" rx="7" fill="#f7f8fa" stroke="#e2e6eb"/>
+    <text x="654" y="678" font-size="7.5" fill="#94a3b8">REFERENCE</text>
+    <text x="654" y="693" font-size="9" fill="#172033">DEMO-SL-90114</text>
+    <rect x="765" y="664" width="115" height="40" rx="7" fill="#f7f8fa" stroke="#e2e6eb"/>
+    <text x="777" y="678" font-size="7.5" fill="#94a3b8">FOLLOW UP</text>
+    <text x="777" y="693" font-size="9" fill="#b45309">yesterday</text>
+    <rect x="888" y="664" width="115" height="40" rx="7" fill="#f7f8fa" stroke="#e2e6eb"/>
+    <text x="900" y="678" font-size="7.5" fill="#94a3b8">LAST CHECKED</text>
+    <text x="900" y="693" font-size="9" fill="#172033">2 days ago</text>
+    <rect x="1011" y="664" width="107" height="40" rx="7" fill="#f7f8fa" stroke="#e2e6eb"/>
+    <text x="1023" y="678" font-size="7.5" fill="#94a3b8">POINTS</text>
+    <text x="1023" y="693" font-size="9" fill="#172033">+60</text>
+
+    <!-- agent panel -->
+    <rect x="642" y="716" width="476" height="78" rx="8" fill="#ffffff" stroke="#e2e6eb"/>
+    <rect x="656" y="728" width="222" height="52" rx="7" fill="#f7f8fa"/>
+    <text x="668" y="742" font-size="7.5" fill="#94a3b8">WHAT CIVICSOS DID</text>
+    <text x="668" y="757" font-size="8.5" fill="#172033">You submitted this, reference</text>
+    <text x="668" y="769" font-size="8.5" fill="#172033">DEMO-SL-90114.</text>
+    <rect x="886" y="728" width="220" height="52" rx="7" fill="#f7f8fa"/>
+    <text x="898" y="742" font-size="7.5" fill="#94a3b8">WHAT HAPPENS NEXT</text>
+    <text x="898" y="757" font-size="8.5" fill="#172033">No response in the expected</text>
+    <text x="898" y="769" font-size="8.5" fill="#172033">window. Next step is ready.</text>
+  </g>
+  <text x="880" y="836" font-size="11" font-weight="600" fill="#172033" text-anchor="middle">5 · Track, follow up, escalate</text>
+  <text x="880" y="852" font-size="10" fill="#64748b" text-anchor="middle">One follow-up date, used by the header, the banner and the reminder alike.</text>
+
+  <!-- flow arrows -->
+  <path d="M370 268 H425" stroke="#2563eb" stroke-width="1.6" fill="none" marker-end="url(#w)"/>
+  <path d="M755 268 H810" stroke="#2563eb" stroke-width="1.6" fill="none" marker-end="url(#w)"/>
+  <path d="M1140 380 H1164 V506 H300 V524" stroke="#2563eb" stroke-width="1.6" fill="none" marker-end="url(#w)"/>
+  <path d="M560 667 H620" stroke="#2563eb" stroke-width="1.6" fill="none" marker-end="url(#w)"/>
+</svg>

@@ -207,36 +207,49 @@ aws ssm describe-parameters \
 
 ## 5. Deploy the frontend
 
-### Amplify Hosting (recommended)
+### Amplify Hosting
 
-1. Push the repository to GitHub.
-2. AWS Console → **Amplify** → **Create new app** → **GitHub**, authorise, pick
-   the repository and branch. *(This step needs a browser: it is an OAuth grant
-   that cannot be scripted.)*
-3. Amplify detects `amplify.yml` in the repository root — no build settings to
-   type in.
-4. Set these environment variables in **App settings → Environment variables**:
+The app already exists for the `prod` stage and is fully configured:
 
-   | Variable | Value |
-   | --- | --- |
-   | `NEXT_PUBLIC_API_BASE_URL` | the `ApiBaseUrl` output |
-   | `NEXT_PUBLIC_COGNITO_USER_POOL_ID` | the `UserPoolId` output |
-   | `NEXT_PUBLIC_COGNITO_CLIENT_ID` | the `UserPoolClientId` output |
+| | |
+| --- | --- |
+| App ID | `ddwkb18wxep69` (ap-south-1) |
+| Platform | `WEB_COMPUTE` — Next.js SSR |
+| URL once connected | `https://main.ddwkb18wxep69.amplifyapp.com` |
+| Environment | `NEXT_PUBLIC_API_BASE_URL`, `NEXT_PUBLIC_COGNITO_USER_POOL_ID`, `NEXT_PUBLIC_COGNITO_CLIENT_ID`, `AMPLIFY_MONOREPO_APP_ROOT` — all set |
 
-   All three are public identifiers by design. **Never** put the Gemini key here —
-   a `NEXT_PUBLIC_` variable is embedded in the browser bundle.
+**One step remains, and it needs a browser.** Connecting a Git repository to an
+Amplify app requires an OAuth grant or a personal access token; neither can be
+scripted from a machine that only has AWS credentials.
 
-5. Deploy. Note the app URL, e.g. `https://main.d1a2b3c4d5e6f7.amplifyapp.com`.
+1. AWS Console → **Amplify** → app **civicsos** → **Connect a repository**.
+2. Choose **GitHub**, authorise AWS Amplify, and pick `yugh88/civicSOS`,
+   branch `main`.
+3. Amplify detects [`amplify.yml`](amplify.yml) in the repository root, so there
+   are no build settings to type in and no environment variables to re-enter.
+4. The first build starts automatically. Every later push to `main` rebuilds.
 
-6. **Re-run the backend deploy** with that origin, so CORS on both API Gateway and
-   the S3 bucket accepts it:
+#### Why not a manual (zip) deployment?
 
-   ```bash
-   npm run deploy:infra -- \
-     -c stage=dev \
-     -c allowedOrigins=https://main.d1a2b3c4d5e6f7.amplifyapp.com \
-     -c alertEmail=you@example.com
-   ```
+Amplify's `create-deployment` / `start-deployment` API needs no token, and it was
+tried first. It is **static-only**: it accepts an SSR bundle and quietly serves
+it as flat files, ignoring `deploy-manifest.json` and never starting the compute
+resource. Since `/cases/[caseId]` is server-rendered, every route 404s. Verified
+directly — `/deploy-manifest.json` was fetchable at the site root afterwards,
+which is exactly what a flat static upload looks like. The Git connection is the
+supported path for an SSR app, and it brings CI/CD with it.
+
+#### After the first build
+
+**Re-run the backend deploy** with the app origin, so CORS on both API Gateway
+and the S3 bucket accepts it:
+
+```bash
+npm run deploy:infra -- \
+  -c stage=prod \
+  -c allowedOrigins=https://main.ddwkb18wxep69.amplifyapp.com \
+  -c alertEmail=you@example.com
+```
 
 ### Alternative: any Node host
 

@@ -1,4 +1,7 @@
-import { chromium } from 'playwright';
+// `playwright-core`, not `playwright`: the base image already ships the
+// browsers, and the full package's postinstall would download another copy —
+// into every CI and Amplify build that installs this workspace.
+import { chromium } from 'playwright-core';
 import { EventBridgeClient, PutEventsCommand } from '@aws-sdk/client-eventbridge';
 import type { StatusCheckRequest, StatusCheckResult } from '@civicsos/core';
 import { runCheck } from './check.js';

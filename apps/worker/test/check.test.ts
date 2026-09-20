@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import type { Browser } from 'playwright';
+import type { Browser } from 'playwright-core';
 import { runCheck } from '../src/check.js';
 import type { StatusCheckRequest } from '@civicsos/core';
 

@@ -61,7 +61,7 @@ await build({
   format: 'esm',
   target: 'node20',
   // Native browser bindings and the AWS SDK stay as real packages.
-  external: ['playwright', '@aws-sdk/*'],
+  external: ['playwright-core', '@aws-sdk/*'],
   // ESM interop for CommonJS deps pulled in transitively.
   banner: {
     js: "import { createRequire as __cr } from 'node:module'; const require = __cr(import.meta.url);",
