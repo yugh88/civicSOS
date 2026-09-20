@@ -10,7 +10,7 @@ import type { AssistantState, HandoffMessage, PayloadField, SubmissionPayload } 
  *
  * Four rules, enforced here rather than promised:
  *
- *  1. It fills only fields present in a verified mapping for this exact origin.
+ *  1. It fills only fields present in a verified mapping for this exact page.
  *     No mapping, no filling — it shows a review panel instead.
  *  2. It never touches a password field, and never reads one.
  *  3. When a login, OTP or CAPTCHA is on screen it stops and waits. It does not
@@ -128,7 +128,7 @@ function fill(mapping: PortalMapping, fields: PayloadField[]): { filled: number;
 function attempt(): void {
   if (!payload) return;
 
-  const mapping = mappingFor(window.location.origin);
+  const mapping = mappingFor(window.location);
   if (!mapping) {
     state = {
       phase: 'REVIEW_ONLY',
@@ -146,7 +146,7 @@ function attempt(): void {
   }
 
   const result = fill(mapping, payload.fields);
-  state = { phase: 'READY', ...result };
+  state = { phase: 'READY', practice: mapping.practice === true, ...result };
   render();
 }
 
@@ -172,7 +172,8 @@ function render(): void {
     state.phase === 'WAITING_FOR_YOU'
       ? state.reason
       : state.phase === 'READY'
-        ? `Filled ${state.filled} field${state.filled === 1 ? '' : 's'}. Check everything, then submit it yourself.`
+        ? `Filled ${state.filled} field${state.filled === 1 ? '' : 's'}. Check everything, then submit it yourself.` +
+          (state.practice ? ' This is the CivicSOS practice portal — submitting here reaches no authority.' : '')
         : state.phase === 'REVIEW_ONLY'
           ? state.reason
           : 'Preparing…';

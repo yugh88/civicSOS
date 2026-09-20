@@ -412,11 +412,19 @@ The browser assistant (`apps/extension`) exists because a web page cannot touch
 another origin's DOM — which is the protection that stops any site filling your
 bank form. It is scoped accordingly:
 
-- **It fills only fields in a verified mapping for that exact origin.** The
-  mapping registry ships **empty**: writing selectors for a portal nobody has
-  inspected would be inventing them, and a wrong selector typing a complaint
-  into the wrong box is worse than no autofill. With no mapping it shows a
-  review panel with copy buttons, which works anywhere.
+- **It fills only fields in a verified mapping for that exact page.** The
+  registry ships with **no unverified entries**: writing selectors for a portal
+  nobody has inspected would be inventing them, and a wrong selector typing a
+  complaint into the wrong box is worse than no autofill. With no mapping it
+  shows a review panel with copy buttons, which works anywhere.
+- **The one verified mapping is a page CivicSOS writes itself.** The practice
+  portal at `/practice-portal` is not a government website, says so at the top
+  of the page, and submits nowhere. It exists so the refusals above can be
+  *watched* rather than taken on trust — the sign-in pause, the challenge pause
+  and the untouched Submit button are all observable there. Its selectors are
+  verifiable by construction, and the extension build re-checks every one of
+  them against the page, so the mapping cannot silently rot into a "verified"
+  fill that fills nothing.
 - **It refuses credential fields structurally.** `isCredentialField` rejects
   password inputs, `one-time-code` autocomplete, and anything named like an OTP,
   CAPTCHA, PIN or CVV — even if a mapping mistakenly pointed at one.
@@ -425,8 +433,10 @@ bank form. It is scoped accordingly:
 - **It never clicks Submit.** The submit selector is recorded in the mapping
   precisely so it can be excluded.
 - **Nothing is persisted.** The service worker holds a hand-off in memory for at
-  most five minutes, delivers it once to a tab whose origin matches, and drops
-  it. `externally_connectable` restricts which origins may reach it at all.
+  most five minutes, delivers it once to a tab whose origin — and, for the
+  practice portal, whose path — matches, and drops it. `externally_connectable`
+  restricts which origins may reach it at all, and the web app offers the
+  payload only to extension IDs it has been explicitly configured with.
 
 The extension is optional. Without it the official path still works — the web
 app shows the prepared complaint with copy buttons.

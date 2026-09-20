@@ -433,6 +433,22 @@ describe('official channel hand-off', () => {
     expect(result.status).toBe(404);
   });
 
+  it('marks a self-filed submission as MANUAL, never as simulated', async () => {
+    const caseId = await createCase(harness);
+    await harness.call('POST', `/cases/${caseId}/agent/prepare-official`, { user: ALICE, body: { approve: true } });
+
+    // The citizen went to the official site and came back with a real number.
+    const submitted = await harness.call('POST', `/cases/${caseId}/submitted`, {
+      user: ALICE,
+      body: { officialReference: 'SWM/2026/118472', channel: 'Swachhata app' },
+    });
+
+    expect(submitted.json.case.submissionMode).toBe('MANUAL');
+    expect(submitted.json.case.officialReference).toBe('SWM/2026/118472');
+    // A real reference must never acquire the demo prefix.
+    expect(submitted.json.case.officialReference).not.toMatch(/^CS-DEMO-/);
+  });
+
   it('leaves the demo provider completely unchanged', async () => {
     const caseId = await createCase(harness);
     // Preparing an official hand-off must not disturb the demo path.

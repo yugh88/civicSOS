@@ -4,7 +4,7 @@ import { useCallback, useState } from 'react';
 import { useApi } from '@/lib/auth';
 import type { PreparedSubmission } from '@/lib/types';
 import { AgentExecution } from './AgentExecution';
-import { Alert, Badge, Button, Card, Dot } from './ui';
+import { Alert, Badge, Button, Card, Dot, Field, Input } from './ui';
 import { IconArrowRight, IconCheck, IconSend, IconShield, IconSparkle } from './icons';
 
 /**
@@ -22,15 +22,34 @@ import { IconArrowRight, IconCheck, IconSend, IconShield, IconSparkle } from './
  * Website", and neither borrows the other's language.
  */
 
-/** Hands the approved payload to the browser assistant, if it is installed. */
-const EXTENSION_IDS: string[] = [];
+/**
+ * Which browser assistants to offer the payload to.
+ *
+ * An unpacked extension gets its ID when it is loaded, so the ID cannot be
+ * committed — it is configuration, not code. Nothing secret about it either:
+ * an extension ID is public, which is why an environment variable is enough
+ * and no secret store is involved.
+ */
+const EXTENSION_IDS: string[] = (process.env.NEXT_PUBLIC_ASSISTANT_EXTENSION_ID ?? '')
+  .split(',')
+  .map((id) => id.trim())
+  .filter((id) => id.length > 0);
 
-async function handoffToAssistant(prepared: PreparedSubmission): Promise<boolean> {
+/** The CivicSOS practice portal — our own page, never a government site. */
+const PRACTICE_PATH = '/practice-portal';
+
+/**
+ * Hands the approved payload to the browser assistant, if it is installed.
+ *
+ * `target` names the page the payload is for. The assistant refuses a payload
+ * delivered anywhere else, so this is the one place the destination is decided.
+ */
+async function handoffToAssistant(
+  prepared: PreparedSubmission,
+  target: { origin: string; pathPrefix?: string },
+): Promise<boolean> {
   const runtime = (globalThis as { chrome?: { runtime?: { sendMessage?: unknown } } }).chrome?.runtime;
   if (!runtime || typeof runtime.sendMessage !== 'function' || EXTENSION_IDS.length === 0) return false;
-
-  const targetOrigin = safeOrigin(prepared.channel.url);
-  if (!targetOrigin) return false;
 
   const send = runtime.sendMessage as (id: string, message: unknown) => Promise<{ ok?: boolean }>;
 
@@ -38,7 +57,8 @@ async function handoffToAssistant(prepared: PreparedSubmission): Promise<boolean
     try {
       const response = await send(id, {
         type: 'CIVICSOS_HANDOFF',
-        targetOrigin,
+        targetOrigin: target.origin,
+        targetPathPrefix: target.pathPrefix,
         payload: prepared.payload,
       });
       if (response?.ok) return true;
@@ -64,11 +84,14 @@ export function SubmissionChoice({
   onDemo,
   demoBusy,
   disabled,
+  onRecorded,
 }: {
   caseId: string;
   onDemo: () => void;
   demoBusy: boolean;
   disabled?: boolean;
+  /** Called once the citizen records a real reference from the official site. */
+  onRecorded?: () => void;
 }) {
   const api = useApi();
   const [prepared, setPrepared] = useState<PreparedSubmission | undefined>();
@@ -87,7 +110,8 @@ export function SubmissionChoice({
         body: { approve: true, provider: 'ASSIST' },
       });
       setPrepared(result);
-      setAssistantActive(await handoffToAssistant(result));
+      const origin = safeOrigin(result.channel.url);
+      setAssistantActive(origin ? await handoffToAssistant(result, { origin }) : false);
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : 'We could not prepare that.');
     } finally {
@@ -97,7 +121,13 @@ export function SubmissionChoice({
 
   if (prepared) {
     return (
-      <OfficialHandoff prepared={prepared} assistantActive={assistantActive} onBack={() => setPrepared(undefined)} />
+      <OfficialHandoff
+        caseId={caseId}
+        prepared={prepared}
+        assistantActive={assistantActive}
+        onBack={() => setPrepared(undefined)}
+        onRecorded={onRecorded}
+      />
     );
   }
 
@@ -189,15 +219,72 @@ export function SubmissionChoice({
  * optional convenience on top.
  */
 function OfficialHandoff({
+  caseId,
   prepared,
   assistantActive,
   onBack,
+  onRecorded,
 }: {
+  caseId: string;
   prepared: PreparedSubmission;
   assistantActive: boolean;
   onBack: () => void;
+  onRecorded?: () => void;
 }) {
+  const api = useApi();
   const [copied, setCopied] = useState<string | undefined>();
+  const [reference, setReference] = useState('');
+  const [recording, setRecording] = useState(false);
+  const [recorded, setRecorded] = useState(false);
+  const [recordError, setRecordError] = useState<string | undefined>();
+  const [practiceHandedOff, setPracticeHandedOff] = useState<boolean | undefined>();
+
+  /**
+   * Opens the CivicSOS practice portal with the same payload.
+   *
+   * The assistant's whole value is the things it refuses to do, and a refusal
+   * you cannot watch is just a claim. This runs it against a form CivicSOS
+   * writes itself, so the sign-in pause, the CAPTCHA pause and the untouched
+   * Submit button are all observable — without pointing an untested autofill at
+   * a real government site.
+   */
+  const openPractice = useCallback(async () => {
+    const handed = await handoffToAssistant(prepared, {
+      origin: window.location.origin,
+      pathPrefix: PRACTICE_PATH,
+    });
+    setPracticeHandedOff(handed);
+    window.open(PRACTICE_PATH, '_blank', 'noopener,noreferrer');
+  }, [prepared]);
+
+  /**
+   * Closes the loop.
+   *
+   * Everything CivicSOS promises after this point — monitoring, the follow-up,
+   * the escalation window — is measured from the filing date and quotes this
+   * reference. Telling the citizen to "record it on your case" and then making
+   * them go and find the case themselves is where that promise quietly breaks,
+   * so the input lives here, next to the site they just used.
+   */
+  const record = useCallback(async () => {
+    setRecording(true);
+    setRecordError(undefined);
+    try {
+      await api(`/cases/${caseId}/submitted`, {
+        method: 'POST',
+        body: {
+          officialReference: reference.trim(),
+          channel: prepared.channel.label,
+        },
+      });
+      setRecorded(true);
+      onRecorded?.();
+    } catch (caught) {
+      setRecordError(caught instanceof Error ? caught.message : 'We could not record that.');
+    } finally {
+      setRecording(false);
+    }
+  }, [api, caseId, onRecorded, prepared.channel.label, reference]);
 
   const copy = useCallback(async (key: string, value: string) => {
     try {
@@ -254,6 +341,28 @@ function OfficialHandoff({
         )}
       </Card>
 
+      {/* A place to watch the assistant work, and refuse, before trusting it. */}
+      <Card className="p-5">
+        <h3 className="text-[15px] font-semibold text-ink">See what the assistant does first</h3>
+        <p className="mt-1.5 text-sm leading-relaxed text-ink-muted">
+          CivicSOS includes a practice form of its own. Open it to watch the assistant fill the supported fields, stop
+          at the sign-in step, stop again at the CAPTCHA, and leave Submit alone. It is not a government website and it
+          sends nothing anywhere.
+        </p>
+
+        <div className="mt-4 flex flex-wrap items-center gap-3">
+          <Button variant="secondary" onClick={openPractice} trailingIcon={<IconArrowRight className="h-[18px] w-[18px]" />}>
+            Open practice portal
+          </Button>
+          {practiceHandedOff === false ? (
+            <p className="text-xs text-ink-muted">
+              The browser assistant isn&apos;t installed, so the practice form will open empty — the copy buttons below
+              work the same way there.
+            </p>
+          ) : null}
+        </div>
+      </Card>
+
       <Card className="p-5">
         <h3 className="text-[15px] font-semibold text-ink">Your prepared complaint</h3>
         <ul className="mt-3 divide-y divide-line">
@@ -299,6 +408,51 @@ function OfficialHandoff({
         ) : null}
       </Card>
 
+      {/* The last step, and the one the whole tracking promise rests on. */}
+      <Card className="p-5">
+        <h3 className="text-[15px] font-semibold text-ink">When the site gives you a reference</h3>
+        <p className="mt-1.5 text-sm leading-relaxed text-ink-muted">
+          Paste it here and CivicSOS starts tracking: it works out when to follow up, watches for a response, and
+          prepares the escalation if nothing happens.
+        </p>
+
+        {recorded ? (
+          <Alert tone="good" className="mt-4" icon={<IconCheck className="h-[18px] w-[18px]" />}>
+            Recorded. Your case is now being tracked from today.
+          </Alert>
+        ) : (
+          <div className="mt-4 space-y-3">
+            {recordError ? (
+              <Alert tone="bad" title="We could not record that">
+                {recordError}
+              </Alert>
+            ) : null}
+
+            <Field
+              label="Complaint or reference number"
+              htmlFor="official-reference"
+              hint="Exactly as the official site showed it."
+            >
+              <Input
+                id="official-reference"
+                value={reference}
+                onChange={(event) => setReference(event.target.value)}
+                placeholder="e.g. SWM/2026/118472"
+                maxLength={120}
+              />
+            </Field>
+
+            <Button loading={recording} disabled={reference.trim().length === 0} onClick={record}>
+              Record it and start tracking
+            </Button>
+            <p className="text-xs text-ink-muted">
+              Only do this once the site has actually confirmed your complaint. CivicSOS takes your word for it — it
+              cannot see the official site.
+            </p>
+          </div>
+        )}
+      </Card>
+
       <div className="flex flex-col gap-2 sm:flex-row">
         {prepared.channel.url ? (
           <a
@@ -317,9 +471,7 @@ function OfficialHandoff({
         </Button>
       </div>
 
-      <p className="text-center text-xs text-ink-muted">
-        Once the site gives you a complaint number, record it on your case so CivicSOS can track and follow it up.
-      </p>
+
     </div>
   );
 }

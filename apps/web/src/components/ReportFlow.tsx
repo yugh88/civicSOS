@@ -913,7 +913,12 @@ function AgentStep({
           </Alert>
         ) : null}
 
-        <SubmissionChoice caseId={caseId} onDemo={onRunDemo} demoBusy={running} />
+        <SubmissionChoice
+          caseId={caseId}
+          onDemo={onRunDemo}
+          demoBusy={running}
+          onRecorded={onContinue}
+        />
 
         <p className="text-center">
           <Button variant="ghost" size="sm" onClick={onContinue}>

@@ -19,7 +19,7 @@
     "test:watch": "npm run test:watch -w @civicsos/core",
     "typecheck": "npm run typecheck --workspaces --if-present",
     "lint": "npm run lint -w @civicsos/web",
-    "verify": "npm run typecheck && npm run test && npm run build",
+    "verify": "npm run typecheck && npm run test && npm run build && npm run build:extension",
     "cdk": "npm run cdk -w @civicsos/infra --",
     "deploy:infra": "npm run deploy -w @civicsos/infra",
     "openapi": "node scripts/generate-openapi.mjs",

@@ -310,6 +310,11 @@ export class CaseService {
       status: 'SUBMITTED',
       submittedAt,
       officialReference: request.officialReference ?? existing.officialReference,
+      // The citizen filed this themselves through a real channel, so the
+      // reference is a real one. Recorded explicitly: without it a genuine
+      // submission is indistinguishable from an unset field, and the case
+      // screen cannot tell the citizen which of the two happened.
+      submissionMode: 'MANUAL',
       updatedAt: isoNow(now),
     };
     next.followUpAt = computeFollowUpDate(next);

@@ -4,17 +4,41 @@
   "version": "1.0.0",
   "description": "Fills supported fields on verified official complaint portals with a complaint you approved in CivicSOS. Never submits, never handles your login.",
   "minimum_chrome_version": "116",
-  "background": { "service_worker": "background.js", "type": "module" },
+  "background": {
+    "service_worker": "background.js",
+    "type": "module"
+  },
   "externally_connectable": {
-    "matches": ["http://localhost/*", "https://*.amplifyapp.com/*"]
+    "matches": [
+      "http://localhost/*",
+      "https://*.amplifyapp.com/*"
+    ]
   },
   "content_scripts": [
     {
-      "matches": ["https://pgportal.gov.in/*", "https://swachhatalive.sbmurban.org/*"],
-      "js": ["content.js"],
+      "matches": [
+        "http://localhost/practice-portal*",
+        "http://127.0.0.1/practice-portal*",
+        "https://*.amplifyapp.com/practice-portal*"
+      ],
+      "js": [
+        "content.js"
+      ],
+      "run_at": "document_idle"
+    },
+    {
+      "matches": [
+        "https://pgportal.gov.in/*",
+        "https://swachhatalive.sbmurban.org/*"
+      ],
+      "js": [
+        "content.js"
+      ],
       "run_at": "document_idle"
     }
   ],
-  "permissions": ["tabs"],
+  "permissions": [
+    "tabs"
+  ],
   "host_permissions": []
 }

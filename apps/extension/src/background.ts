@@ -12,6 +12,7 @@ import type { HandoffMessage } from './types.js';
 interface PendingHandoff {
   payload: HandoffMessage['payload'];
   targetOrigin: string;
+  targetPathPrefix?: string;
   expiresAt: number;
 }
 
@@ -39,6 +40,7 @@ chrome.runtime.onMessageExternal.addListener((message, sender, respond) => {
   pending = {
     payload: message.payload,
     targetOrigin: message.targetOrigin,
+    targetPathPrefix: message.targetPathPrefix,
     expiresAt: Date.now() + HANDOFF_TTL_MS,
   };
   respond({ ok: true });
@@ -52,17 +54,22 @@ chrome.tabs.onUpdated.addListener(async (tabId, info, tab) => {
     return;
   }
 
-  let origin: string;
+  let target: URL;
   try {
-    origin = new URL(tab.url).origin;
+    target = new URL(tab.url);
   } catch {
     return;
   }
-  if (origin !== pending.targetOrigin) return;
+  if (target.origin !== pending.targetOrigin) return;
+  // A path-scoped hand-off waits for that exact page. Without this, a hand-off
+  // aimed at the practice portal would fire on whichever same-origin CivicSOS
+  // page finished loading first.
+  if (pending.targetPathPrefix && !target.pathname.startsWith(pending.targetPathPrefix)) return;
 
   const handoff: HandoffMessage = {
     type: 'CIVICSOS_HANDOFF',
     targetOrigin: pending.targetOrigin,
+    targetPathPrefix: pending.targetPathPrefix,
     payload: pending.payload,
   };
 
