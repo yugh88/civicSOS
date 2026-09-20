@@ -65,6 +65,13 @@ function resolveEvidence(context: PlanContext): EvidenceRequirement[] {
 function buildSteps(
   context: PlanContext,
   evidence: EvidenceRequirement[],
+  /**
+   * The date the rest of the product calls "your follow-up date" — the one on
+   * the case header, in the overdue banner and in the reminder. The timeline
+   * must quote that exact date rather than deriving its own, or the same screen
+   * ends up saying the follow-up was due yesterday and again in seven days.
+   */
+  followUpAt: string,
   caseRecord?: Pick<CaseRecord, 'status' | 'submittedAt' | 'escalationLevel' | 'resolvedAt'>,
 ): PlanStep[] {
   const path = getResolutionPath(context.categoryId);
@@ -126,7 +133,9 @@ function buildSteps(
       owner: 'YOU',
       // AWAITING_RESPONSE is exactly the state a logged follow-up produces.
       done: caseRecord?.status === 'AWAITING_RESPONSE' || escalated || resolved,
-      dueAt: submitted ? isoAddDays(anchor, path.expectedResolutionDays) : undefined,
+      // Only once submitted: before that there is nothing to chase, and a date
+      // here would read as a deadline the citizen has already started missing.
+      dueAt: submitted ? followUpAt : undefined,
     },
     {
       key: 'escalate',
@@ -212,7 +221,7 @@ export function buildResolutionPlan(
     authority,
     requestedAction: path.requestedAction,
     evidence,
-    steps: buildSteps(context, evidence, caseRecord),
+    steps: buildSteps(context, evidence, followUpAt, caseRecord),
     expectedAcknowledgementDays: path.expectedAcknowledgementDays,
     expectedResolutionDays: path.expectedResolutionDays,
     followUpAt,

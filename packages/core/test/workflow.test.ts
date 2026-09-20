@@ -355,6 +355,48 @@ describe('resolution plan', () => {
     expect(plan.steps[firstPending]!.key).toBe('escalate');
   });
 
+  it('quotes the case\'s own follow-up date on the follow-up step', () => {
+    // Regression: the step used to derive its date from the resolution window
+    // while the case header used the acknowledgement window, so an overdue case
+    // said "follow up was due yesterday" and "follow up in 7 days" at once.
+    const plan = buildResolutionPlan(
+      {
+        categoryId: 'STREETLIGHT',
+        urgency: 'MEDIUM',
+        location: { city: 'Gurugram' },
+        whatHappened: 'Lights out.',
+      },
+      {
+        status: 'SUBMITTED',
+        createdAt: '2026-09-15T00:00:00.000Z',
+        submittedAt: '2026-09-16T00:00:00.000Z',
+        followUpAt: '2026-09-19T00:00:00.000Z',
+        escalationLevel: 0,
+      },
+    );
+
+    const followUpStep = plan.steps.find((step) => step.key === 'follow_up');
+    expect(followUpStep?.dueAt).toBe(plan.followUpAt);
+    expect(followUpStep?.dueAt).toBe('2026-09-19T00:00:00.000Z');
+
+    // And escalation still comes after it, never on the same day by accident.
+    const escalateStep = plan.steps.find((step) => step.key === 'escalate');
+    expect(escalateStep?.dueAt).toBeDefined();
+    expect(new Date(escalateStep!.dueAt!).getTime()).toBeGreaterThan(
+      new Date(followUpStep!.dueAt!).getTime(),
+    );
+  });
+
+  it('shows no follow-up date before the complaint has been submitted', () => {
+    const plan = buildResolutionPlan({
+      categoryId: 'STREETLIGHT',
+      urgency: 'MEDIUM',
+      location: { city: 'Gurugram' },
+      whatHappened: 'Lights out.',
+    });
+    expect(plan.steps.find((step) => step.key === 'follow_up')?.dueAt).toBeUndefined();
+  });
+
   it('flags the required evidence that is still missing', () => {
     const plan = buildResolutionPlan({
       categoryId: 'ROAD_DAMAGE',
