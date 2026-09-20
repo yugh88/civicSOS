@@ -76,7 +76,7 @@ submission, because none of those come from model output.
 | [DEMO.md](DEMO.md) | The three-minute demo script |
 | [docs/openapi.json](docs/openapi.json) | Generated OpenAPI 3.1 document |
 | [docs/wireframe.svg](docs/wireframe.svg) | The core journey across five screens |
-| [docs/architecture.svg](docs/architecture.svg) | AWS architecture, marked by what is deployed |
+| [docs/architecture.png](docs/architecture.png) | AWS architecture and the end-to-end agent flow |
 | [apps/worker/README.md](apps/worker/README.md) | The status-check worker: what it does and what it refuses |
 | [apps/extension/README.md](apps/extension/README.md) | The browser assistant and its verified-mapping policy |
 
@@ -189,11 +189,18 @@ no tool:
 
 ## Architecture in one picture
 
-![CivicSOS AWS architecture](docs/architecture.svg)
+![CivicSOS AWS architecture](docs/architecture.png)
 
 Everything above is serverless and scales to zero. The one container — the
-status-check worker — is an on-demand Fargate task that exists only while a
-batch is being checked, and is not deployed unless you ask for it.
+browser-assist worker — is an on-demand Fargate task that exists only while a
+batch is being checked.
+
+Two boxes in that diagram are built and tested but **not yet live**, and it is
+worth saying so rather than letting the picture imply otherwise. The **WAF** web
+ACL exists in us-east-1 but is attached to nothing: it cannot attach to an HTTP
+API, so it waits on CloudFront account verification. The **ECS Fargate** worker
+deploys only with `-c enableWorker=true`. Everything else in the diagram is
+deployed and serving today.
 
 Secrets live in SSM Parameter Store as SecureString parameters and are read once
 per Lambda container. Nothing secret is in the repository, the CloudFormation
