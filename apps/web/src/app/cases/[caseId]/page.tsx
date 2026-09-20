@@ -406,6 +406,10 @@ export default function CaseDetailPage() {
             <PlanView
               plan={plan}
               hideSummary
+              // Once the complaint is filed, the evidence checklist and the
+              // channel list are instructions for a step already taken. The
+              // reference, status and submission log carry it from here.
+              hideSubmissionGuidance={Boolean(record.submittedAt)}
               notice={
                 escalation.followUpOverdue ? (
                   <Alert tone="warn" title="This is past its follow-up date" icon={<IconClock className="h-[18px] w-[18px]" />}>

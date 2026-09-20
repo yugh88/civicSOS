@@ -209,10 +209,20 @@ export function PlanView({
   notice,
   /** Hides the "what happened" summary when the page already shows it. */
   hideSummary = false,
+  /**
+   * Drops the evidence checklist and the channel list.
+   *
+   * Both are instructions for *getting the complaint filed*. Once it has been
+   * filed they are answering a question the citizen is no longer asking, and
+   * the case already carries the reference, the status and the submission log.
+   * Nothing replaces them — the space is better spent on what happens next.
+   */
+  hideSubmissionGuidance = false,
 }: {
   plan: ResolutionPlan;
   notice?: React.ReactNode;
   hideSummary?: boolean;
+  hideSubmissionGuidance?: boolean;
 }) {
   const urgencyTone: Tone = URGENCY_TONE[plan.urgency];
 
@@ -250,7 +260,7 @@ export function PlanView({
         </div>
       </Card>
 
-      <div className="grid gap-4 lg:grid-cols-2">
+      <div className={hideSubmissionGuidance ? undefined : 'grid gap-4 lg:grid-cols-2'}>
         <Card className="p-5 sm:p-6">
           <SectionHeading title="Who handles this" description={plan.authority.scope} />
           <p className="mt-3 text-[15px] font-medium leading-snug text-ink">{plan.authority.name}</p>
@@ -265,23 +275,27 @@ export function PlanView({
           ) : null}
         </Card>
 
-        <Card className="p-5 sm:p-6">
-          <SectionHeading title="What you need" description="An official will ask for these." />
-          <div className="mt-4">
-            <EvidenceChecklist items={plan.evidence} />
-          </div>
-        </Card>
+        {!hideSubmissionGuidance ? (
+          <Card className="p-5 sm:p-6">
+            <SectionHeading title="What you need" description="An official will ask for these." />
+            <div className="mt-4">
+              <EvidenceChecklist items={plan.evidence} />
+            </div>
+          </Card>
+        ) : null}
       </div>
 
-      <Card className="p-5 sm:p-6">
-        <SectionHeading
-          title="Where to submit it"
-          description="You submit this yourself — CivicSOS does not file it for you."
-        />
-        <div className="mt-4">
-          <Channels channels={plan.submissionChannels} />
-        </div>
-      </Card>
+      {!hideSubmissionGuidance ? (
+        <Card className="p-5 sm:p-6">
+          <SectionHeading
+            title="Where to submit it"
+            description="You submit this yourself — CivicSOS does not file it for you."
+          />
+          <div className="mt-4">
+            <Channels channels={plan.submissionChannels} />
+          </div>
+        </Card>
+      ) : null}
 
       <div className="grid gap-4 lg:grid-cols-2">
         <Card className="p-5 sm:p-6">
