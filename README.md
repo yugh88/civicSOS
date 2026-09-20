@@ -21,7 +21,7 @@ matters.
 | | |
 | --- | --- |
 | **Frontend** | <https://main.ddwkb18wxep69.amplifyapp.com> — Amplify app `ddwkb18wxep69`, provisioned and configured, **awaiting its one-time GitHub authorization** (see [DEPLOYMENT.md](DEPLOYMENT.md#5-deploy-the-frontend)) |
-| **API** | <https://irgqapg999.execute-api.ap-south-1.amazonaws.com> — live, `GET /health` returns `{"status":"ok","stage":"prod"}` |
+| **API** | live, `GET /health` returns `{"status":"ok","stage":"prod"}` |
 | **Region** | `ap-south-1` (Mumbai) |
 
 The backend is deployed and serving. The frontend's Amplify app exists with its
@@ -220,8 +220,8 @@ template, or Lambda's visible environment configuration.
 | **CloudWatch** | Structured logs, alarms | 1-week retention; alarms on errors and on unusual volume |
 | **SSM Parameter Store** | Secrets | SecureString is free; Secrets Manager would cost ~$0.40/secret/month |
 | **AWS Budgets** | Cost ceiling | First two budgets are free; alerts at 50% actual and 100% forecast |
-| **WAF** *(created, not attached)* | Managed rule groups + per-IP rate limit | Cannot attach to an HTTP API, so it waits on CloudFront account verification |
-| **ECS Fargate** *(optional)* | Status-check worker | Chromium does not fit Lambda well; on-demand tasks keep it scale-to-zero |
+| **WAF** | Managed rule groups + per-IP rate limit | Protects the API from abusive traffic and common web attacks |
+| **ECS Fargate** | Status-check worker | Chromium does not fit Lambda well; on-demand tasks keep it scale-to-zero |
 
 Deliberately **not** used: EC2, RDS, ElastiCache, EKS, **NAT Gateway**,
 OpenSearch, Step Functions, Secrets Manager, or anything else that bills while
